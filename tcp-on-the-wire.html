@@ -1,0 +1,2560 @@
+<title>TCP on the Wire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* ============================================================
+   TCP on the Wire — tokens
+   Direction is the design system: ochre = client→server,
+   teal = server→client, brick = reset / loss.
+   ============================================================ */
+:root{
+  --paper:#F4F6F8;
+  --surface:#FFFFFF;
+  --surface-2:#EAEEF2;
+  --surface-3:#DFE5EC;
+  --line:#CBD5DF;
+  --line-soft:#E2E8EF;
+  --ink:#16202B;
+  --ink-2:#455A6D;
+  --ink-3:#5C6E84;
+
+  --client:#B45309;
+  --client-soft:#FBF1E1;
+  --client-line:#E4C48D;
+  --server:#0E6E70;
+  --server-soft:#E2F1F0;
+  --server-line:#93C9C6;
+
+  --danger:#B02A26;
+  --danger-soft:#FBEBE9;
+  --danger-line:#E8B4AF;
+  --ok:#2C7440;
+  --ok-soft:#E7F2E9;
+
+  --shadow:0 1px 2px rgba(22,32,43,.05), 0 8px 24px -12px rgba(22,32,43,.18);
+  --shadow-lift:0 2px 4px rgba(22,32,43,.06), 0 18px 40px -18px rgba(22,32,43,.28);
+
+  --measure:69ch;
+  --wide:1120px;
+  --r:6px;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1418;
+    --surface:#141D23;
+    --surface-2:#1B262D;
+    --surface-3:#24333B;
+    --line:#2E3F49;
+    --line-soft:#212E36;
+    --ink:#E3EBF1;
+    --ink-2:#A3B5C1;
+    --ink-3:#718696;
+    --client:#EAA33F;
+    --client-soft:#2B2113;
+    --client-line:#6B4E1E;
+    --server:#48C7C0;
+    --server-soft:#0F2B2B;
+    --server-line:#1F5F5D;
+    --danger:#EC7367;
+    --danger-soft:#2E1715;
+    --danger-line:#68302B;
+    --ok:#66C67C;
+    --ok-soft:#132A19;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    --shadow-lift:0 2px 4px rgba(0,0,0,.45), 0 18px 40px -18px rgba(0,0,0,.75);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1418;
+  --surface:#141D23;
+  --surface-2:#1B262D;
+  --surface-3:#24333B;
+  --line:#2E3F49;
+  --line-soft:#212E36;
+  --ink:#E3EBF1;
+  --ink-2:#A3B5C1;
+  --ink-3:#718696;
+  --client:#EAA33F;
+  --client-soft:#2B2113;
+  --client-line:#6B4E1E;
+  --server:#48C7C0;
+  --server-soft:#0F2B2B;
+  --server-line:#1F5F5D;
+  --danger:#EC7367;
+  --danger-soft:#2E1715;
+  --danger-line:#68302B;
+  --ok:#66C67C;
+  --ok-soft:#132A19;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  --shadow-lift:0 2px 4px rgba(0,0,0,.45), 0 18px 40px -18px rgba(0,0,0,.75);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:17px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+::selection{background:var(--client-soft);color:var(--ink)}
+
+/* ---------- layout skeleton ---------- */
+.wrap{max-width:var(--wide);margin:0 auto;padding:0 22px}
+.col{max-width:var(--measure);margin:0 auto}
+.stack{display:flex;flex-direction:column}
+section{padding:0 0 12px}
+.sec-body>*+*{margin-top:0}
+.sec-body{display:flex;flex-direction:column;gap:18px}
+
+/* ---------- type ---------- */
+h1,h2,h3,h4{font-family:var(--display);font-stretch:88%;margin:0;text-wrap:balance;letter-spacing:-.012em;line-height:1.12}
+h1{font-size:clamp(2.6rem,7.2vw,4.4rem);font-weight:800;letter-spacing:-.028em}
+h2{font-size:clamp(1.7rem,3.4vw,2.35rem);font-weight:700;letter-spacing:-.02em}
+h3{font-size:1.24rem;font-weight:700;letter-spacing:-.008em;font-stretch:92%}
+h4{font-size:1.02rem;font-weight:700;font-stretch:95%}
+p{margin:0}
+.lede{font-size:1.16rem;line-height:1.55;color:var(--ink-2)}
+strong{font-weight:700;color:var(--ink)}
+em{font-style:italic}
+a{color:var(--ink);text-decoration-color:var(--client);text-underline-offset:3px;text-decoration-thickness:1.5px}
+a:hover{color:var(--client)}
+ul,ol{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:.42em}
+li::marker{color:var(--ink-3)}
+
+.eyebrow{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);
+}
+.sec-head{display:flex;flex-direction:column;gap:8px;padding-top:64px;margin-bottom:22px}
+.sec-head .eyebrow{display:flex;align-items:center;gap:10px}
+.sec-head .eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+.sec-sub{color:var(--ink-2);font-size:1.04rem;max-width:60ch}
+
+code,kbd,.m{font-family:var(--mono);font-variant-ligatures:none}
+p code,li code,td code,.m{
+  font-size:.86em;background:var(--surface-2);border:1px solid var(--line-soft);
+  padding:.08em .34em;border-radius:4px;white-space:nowrap;
+}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- masthead ---------- */
+.masthead{padding:54px 0 30px;border-bottom:1px solid var(--line)}
+.mast-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:34px;align-items:start}
+@media(min-width:940px){.mast-grid{grid-template-columns:minmax(0,1fr) 400px;gap:48px}}
+.mast-tag{
+  display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:.7rem;
+  font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);
+  border:1px solid var(--line);background:var(--surface);border-radius:100px;padding:5px 13px;
+}
+.mast-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+h1 .h1-sub{display:block;font-size:.34em;font-weight:600;font-stretch:100%;letter-spacing:.01em;color:var(--ink-3);margin-top:.5em;line-height:1.4}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.rfc{
+  font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--ink-2);
+  border:1px solid var(--line);border-radius:4px;padding:3px 8px;background:var(--surface);
+}
+
+/* ---------- sticky nav ---------- */
+.navbar{
+  position:sticky;top:0;z-index:60;background:var(--paper);
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:saturate(160%) blur(10px);-webkit-backdrop-filter:saturate(160%) blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.navbar-inner{max-width:var(--wide);margin:0 auto;padding:0 22px;display:flex;align-items:center;gap:14px}
+.nav-mark{font-family:var(--display);font-stretch:82%;font-weight:800;font-size:.9rem;letter-spacing:.02em;white-space:nowrap;padding:11px 0}
+.nav-mark span{color:var(--client)}
+.nav-scroll{overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex:1}
+.nav-scroll::-webkit-scrollbar{display:none}
+.nav-list{display:flex;gap:2px;padding:7px 0}
+.nav-list a{
+  font-family:var(--mono);font-size:.71rem;font-weight:500;letter-spacing:.03em;
+  color:var(--ink-3);text-decoration:none;padding:5px 9px;border-radius:5px;white-space:nowrap;
+}
+.nav-list a:hover{color:var(--ink);background:var(--surface-2)}
+.nav-list a.on{color:var(--client);background:var(--client-soft)}
+
+/* ---------- panels ---------- */
+.panel{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.panel-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);
+}
+.panel-bar h4{font-size:.78rem;font-family:var(--mono);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.panel-body{padding:16px}
+.panel-foot{padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2);font-size:.82rem;color:var(--ink-2)}
+
+/* callouts */
+.note,.fix,.key{
+  border:1px solid var(--line);border-left:3px solid var(--ink-3);
+  background:var(--surface);border-radius:0 var(--r) var(--r) 0;padding:13px 16px;
+  display:flex;flex-direction:column;gap:7px;font-size:.95rem;
+}
+.note{border-left-color:var(--server);background:var(--server-soft)}
+.fix{border-left-color:var(--danger);background:var(--danger-soft)}
+.key{border-left-color:var(--client);background:var(--client-soft)}
+.note .tag,.fix .tag,.key .tag{
+  font-family:var(--mono);font-size:.65rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+}
+.note .tag{color:var(--server)}.fix .tag{color:var(--danger)}.key .tag{color:var(--client)}
+
+/* ---------- tables ---------- */
+.tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+thead th{
+  font-family:var(--mono);font-size:.67rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover{background:var(--surface-2)}
+
+/* ---------- chips ---------- */
+.chip{
+  display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.7rem;font-weight:600;
+  letter-spacing:.04em;padding:2px 7px;border-radius:4px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink-2);white-space:nowrap;
+}
+.chip.c{background:var(--client-soft);border-color:var(--client-line);color:var(--client)}
+.chip.s{background:var(--server-soft);border-color:var(--server-line);color:var(--server)}
+.chip.d{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger)}
+.chip.ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+
+/* ---------- buttons ---------- */
+button{font-family:inherit;font-size:inherit;color:inherit}
+.btn{
+  font-family:var(--mono);font-size:.74rem;font-weight:600;letter-spacing:.05em;
+  padding:6px 12px;border-radius:5px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-2);cursor:pointer;transition:background .12s,color .12s,border-color .12s;
+}
+.btn:hover{background:var(--surface-2);color:var(--ink)}
+.btn.primary{background:var(--client);border-color:var(--client);color:#FFFFFF}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#1A1206}}
+:root[data-theme="dark"] .btn.primary{color:#1A1206}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+:focus-visible{outline:2px solid var(--client);outline-offset:2px;border-radius:3px}
+input[type=range]{accent-color:var(--client);cursor:pointer}
+.ctrl{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.05em}
+
+figure{margin:0;display:flex;flex-direction:column;gap:9px}
+figcaption{font-size:.85rem;color:var(--ink-3);line-height:1.5;max-width:64ch}
+.fig-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;overflow-x:auto}
+svg.diagram{display:block;max-width:100%;height:auto;color:var(--ink)}
+</style>
+<style>
+/* ============================================================
+   Instrument components
+   ============================================================ */
+
+/* ---- The Lab: ladder simulator ---- */
+.lab{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media(min-width:900px){.lab{grid-template-columns:minmax(0,1fr) 330px}}
+.lab-left{border-right:1px solid var(--line);min-width:0}
+@media(max-width:899px){.lab-left{border-right:0;border-bottom:1px solid var(--line)}}
+
+.state-row{
+  display:flex;align-items:stretch;gap:0;border-bottom:1px solid var(--line);
+  background:var(--surface-2);font-family:var(--mono);
+}
+.state-cell{flex:1;padding:8px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.state-cell + .state-cell{border-left:1px solid var(--line)}
+.state-cell .who{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.state-cell .st{font-size:.86rem;font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.state-cell.c .st{color:var(--client)}
+.state-cell.s .st{color:var(--server)}
+
+.ladder-scroll{
+  position:relative;overflow:auto;height:474px;background:var(--surface);
+  scroll-behavior:smooth;
+}
+@media(prefers-reduced-motion:reduce){.ladder-scroll{scroll-behavior:auto}}
+.ladder-scroll svg{display:block;width:560px}
+.lad-line{stroke:var(--line);stroke-width:1.5}
+.lad-host{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;fill:var(--ink-3);text-transform:uppercase}
+.lad-addr{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.lad-hdr{fill:var(--surface);}
+.pk{cursor:pointer}
+.pk .wire{stroke-width:1.7;fill:none;stroke-linecap:round}
+.pk.c2s .wire{stroke:var(--client)}
+.pk.s2c .wire{stroke:var(--server)}
+.pk.lost .wire{stroke:var(--danger);stroke-dasharray:4 3}
+.pk .head{stroke:none}
+.pk.c2s .head{fill:var(--client)}
+.pk.s2c .head{fill:var(--server)}
+.pk.lost .head{fill:var(--danger)}
+.pk .lbl{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.02em;paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
+.pk.c2s .lbl{fill:var(--client)}
+.pk.s2c .lbl{fill:var(--server)}
+.pk.lost .lbl{fill:var(--danger)}
+.pk .hit{fill:transparent;stroke:transparent;stroke-width:14}
+.pk.sel .wire{stroke-width:3.4}
+.pk.sel .lbl{font-weight:700}
+.pk .ring{fill:none;stroke-width:1.5;opacity:0}
+.pk.sel .ring{opacity:1}
+.pk.c2s .ring{stroke:var(--client)}
+.pk.s2c .ring{stroke:var(--server)}
+.pk.lost .ring{stroke:var(--danger)}
+.lad-ann{font-family:var(--body);font-size:10.5px;font-style:italic;fill:var(--ink-3)}
+.lad-phase{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;fill:var(--ink-3)}
+.lad-phase-line{stroke:var(--line-soft);stroke-width:1;stroke-dasharray:3 3}
+.lad-x{stroke:var(--danger);stroke-width:2;stroke-linecap:round}
+
+/* inspector */
+.insp{display:flex;flex-direction:column;min-width:0}
+.insp-head{padding:12px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;gap:7px}
+.insp-title{font-family:var(--display);font-stretch:90%;font-weight:700;font-size:1.02rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.insp-why{font-size:.87rem;color:var(--ink-2);line-height:1.5}
+.insp-body{padding:4px 0;overflow-y:auto;max-height:420px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:0 12px;font-family:var(--mono);font-size:.78rem}
+.kv dt{padding:5px 14px;color:var(--ink-3);letter-spacing:.04em;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+.kv dd{padding:5px 14px 5px 0;margin:0;color:var(--ink);border-bottom:1px solid var(--line-soft);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kv dd .sub{color:var(--ink-3);font-size:.92em}
+.kv dt.grp{grid-column:1/-1;background:var(--surface-2);color:var(--ink-3);font-size:.63rem;letter-spacing:.14em;text-transform:uppercase;padding:6px 14px}
+.flagbits{display:flex;gap:2px;flex-wrap:wrap}
+.fb{font-family:var(--mono);font-size:.63rem;font-weight:600;padding:1px 4px;border-radius:3px;border:1px solid var(--line);color:var(--ink-3);background:var(--surface-2)}
+.fb.on{background:var(--client);border-color:var(--client);color:var(--surface)}
+.insp .empty{padding:22px 14px;color:var(--ink-3);font-size:.88rem;text-align:center;line-height:1.5}
+
+/* ---- Header bit map ---- */
+.hdr-map{display:flex;flex-direction:column;gap:0;font-family:var(--mono);min-width:520px}
+.hdr-ruler{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line)}
+.hdr-ruler span{
+  font-size:8px;color:var(--ink-3);text-align:center;padding:2px 0;
+  border-right:1px solid var(--line-soft);
+}
+.hdr-ruler span:last-child{border-right:0}
+.hdr-row{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line-soft)}
+.hdr-row:last-child{border-bottom:0}
+.fld{
+  border-right:1px solid var(--line);background:var(--surface);cursor:pointer;
+  padding:9px 6px;display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;
+  text-align:center;transition:background .12s;min-width:0;
+}
+.fld:last-child{border-right:0}
+.fld:hover{background:var(--surface-2)}
+.fld .fn{font-size:.7rem;font-weight:600;color:var(--ink);letter-spacing:.01em;line-height:1.2}
+.fld .fb2{font-size:.6rem;color:var(--ink-3)}
+.fld.on{background:var(--client-soft);box-shadow:inset 0 0 0 2px var(--client)}
+.fld.on .fn{color:var(--client)}
+.fld.var{background:repeating-linear-gradient(45deg,var(--surface),var(--surface) 6px,var(--surface-2) 6px,var(--surface-2) 12px)}
+.hdr-side{display:flex;flex-direction:column;gap:10px}
+.hdr-detail{border-top:1px solid var(--line);padding:15px;display:flex;flex-direction:column;gap:9px;background:var(--surface-2)}
+.hdr-detail h4{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.hdr-detail .off{font-family:var(--mono);font-size:.68rem;font-weight:500;color:var(--ink-3);letter-spacing:.06em}
+.hdr-detail p{font-size:.92rem;color:var(--ink-2);line-height:1.55;max-width:70ch}
+.hdr-detail .gotcha{font-size:.87rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--danger);border-radius:0 4px 4px 0;padding:9px 12px}
+.hdr-detail .gotcha b{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--danger);display:block;margin-bottom:3px}
+
+/* ---- byte strip / sliding window ---- */
+.strip{display:flex;height:38px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface)}
+.cellB{flex:1;border-right:1px solid var(--surface);transition:background .18s}
+.cellB:last-child{border-right:0}
+.b-ack{background:var(--surface-3)}
+.b-fly{background:var(--client)}
+.b-use{background:var(--client-soft)}
+.b-no{background:var(--surface)}
+.b-rcv{background:var(--server)}
+.b-buf{background:var(--server-soft)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-family:var(--mono);font-size:.68rem;color:var(--ink-2)}
+.legend i{width:11px;height:11px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px;border:1px solid var(--line)}
+.win-nums{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--mono);font-size:.75rem;color:var(--ink-2)}
+.win-nums b{color:var(--ink);font-weight:600}
+
+/* ---- state machine ---- */
+.sm-node rect{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.sm-node text{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;fill:var(--ink-2);text-anchor:middle}
+.sm-node.act rect{fill:var(--client-soft);stroke:var(--client);stroke-width:2.5}
+.sm-node.act text{fill:var(--client)}
+.sm-node.acts rect{fill:var(--server-soft);stroke:var(--server);stroke-width:2.5}
+.sm-node.acts text{fill:var(--server)}
+.sm-e{fill:none;stroke-width:1.4}
+.sm-e.act{stroke:var(--client)}
+.sm-e.pas{stroke:var(--server)}
+.sm-e.tmo{stroke:var(--ink-3);stroke-dasharray:5 4}
+.sm-l{font-family:var(--mono);font-size:9px;fill:var(--ink-3);paint-order:stroke;stroke:var(--surface);stroke-width:3.5px;stroke-linejoin:round}
+.sm-l.act{fill:var(--client)}
+.sm-l.pas{fill:var(--server)}
+
+/* ---- cwnd chart ---- */
+.cw-grid{stroke:var(--line-soft);stroke-width:1}
+.cw-ax{stroke:var(--line);stroke-width:1.5}
+.cw-t{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.cw-t.b{font-weight:600;fill:var(--ink-2)}
+.cw-band{opacity:.5}
+.cw-line{fill:none;stroke:var(--client);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.cw-ss{stroke:var(--server);stroke-width:1.5;stroke-dasharray:5 4;fill:none}
+.cw-dot{fill:var(--danger)}
+
+/* ---- flag toggles ---- */
+.flag-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
+.flag-btn{
+  display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;
+  border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:8px 10px;cursor:pointer;
+  transition:background .12s,border-color .12s;
+}
+.flag-btn:hover{background:var(--surface-2)}
+.flag-btn .fname{font-family:var(--mono);font-size:.82rem;font-weight:600;color:var(--ink)}
+.flag-btn .fbit{font-family:var(--mono);font-size:.63rem;color:var(--ink-3);letter-spacing:.06em}
+.flag-btn[aria-pressed="true"]{background:var(--client-soft);border-color:var(--client)}
+.flag-btn[aria-pressed="true"] .fname{color:var(--client)}
+.flag-out{
+  font-family:var(--mono);font-size:.82rem;padding:12px 14px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:5px;display:flex;flex-direction:column;gap:6px;
+}
+.flag-out .bits{font-size:1.02rem;letter-spacing:.24em;font-weight:600;color:var(--ink)}
+.flag-out .verdict{font-family:var(--body);font-size:.92rem;color:var(--ink-2);line-height:1.5}
+
+/* ---- port bar ---- */
+.portbar{position:relative;height:46px;display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.portseg{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.portseg.well{background:var(--client-soft);border-right:1px solid var(--line)}
+.portseg.reg{background:var(--surface-2);border-right:1px solid var(--line)}
+.portseg.eph{background:var(--server-soft)}
+.portseg span{font-family:var(--mono);font-size:.64rem;font-weight:600;color:var(--ink-2);letter-spacing:.05em;white-space:nowrap;padding:0 4px}
+.porttick{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.65rem;color:var(--ink-3);margin-top:5px}
+
+/* ---- misc ---- */
+.grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media(min-width:760px){.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.grid3{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media(min-width:700px){.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:15px;display:flex;flex-direction:column;gap:7px}
+.card h4{font-size:.95rem}
+.card p{font-size:.9rem;color:var(--ink-2);line-height:1.55}
+pre{
+  margin:0;font-family:var(--mono);font-size:.79rem;line-height:1.65;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r);padding:14px;overflow-x:auto;color:var(--ink-2);
+}
+pre b{color:var(--ink);font-weight:600}
+pre .cm{color:var(--ink-3);font-style:italic}
+pre .cl{color:var(--client)}
+pre .sv{color:var(--server)}
+pre{min-width:0}
+@media(min-width:980px){
+  .sec-body>pre{margin-left:-92px;margin-right:-92px}
+  .col>.tbl-scroll{margin-left:-92px;margin-right:-92px}
+}
+.foot{border-top:1px solid var(--line);margin-top:70px;padding:30px 0 60px;color:var(--ink-3);font-size:.86rem;display:flex;flex-direction:column;gap:8px}
+.foot a{color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}.fly{display:none}}
+</style>
+<nav class="navbar" aria-label="Sections">
+  <div class="navbar-inner">
+    <div class="nav-mark">TCP<span>/</span>WIRE</div>
+    <div class="nav-scroll">
+      <div class="nav-list">
+        <a href="#layers">Layers</a>
+        <a href="#stream">Byte stream</a>
+        <a href="#segment">Segment</a>
+        <a href="#flags">Flags</a>
+        <a href="#ports">Ports</a>
+        <a href="#lab">The Lab</a>
+        <a href="#open">Handshake</a>
+        <a href="#send">Sending</a>
+        <a href="#loss">Loss &amp; control</a>
+        <a href="#close">Closing</a>
+        <a href="#states">States</a>
+        <a href="#checksum">Checksum</a>
+        <a href="#http">HTTP</a>
+        <a href="#seeit">See it</a>
+        <a href="#notes">Your notes</a>
+        <a href="#card">Cheat sheet</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-grid">
+      <div class="stack" style="gap:20px">
+        <div><span class="mast-tag"><i class="dot"></i>Transmission Control Protocol</span></div>
+        <h1>TCP on the Wire<span class="h1-sub">Every field, every state, every packet — from the first SYN to the last ACK, animated.</span></h1>
+        <p class="lede">TCP takes an unreliable, out-of-order, duplicating, packet-dropping network and hands your application a clean, ordered, reliable stream of bytes. This page shows exactly how — by drawing the packets.</p>
+        <div class="mast-meta">
+          <span class="rfc">RFC 9293 — core spec</span>
+          <span class="rfc">RFC 7323 — windows &amp; timestamps</span>
+          <span class="rfc">RFC 5681 — congestion control</span>
+          <span class="rfc">RFC 2018 — SACK</span>
+          <span class="rfc">RFC 6298 — retransmission timer</span>
+        </div>
+      </div>
+
+      <figure>
+        <div class="fig-box" style="padding:10px">
+          <svg class="diagram" viewBox="0 0 400 262" role="img" aria-label="Three-way handshake: client sends SYN with sequence 0; server replies SYN-ACK with its own sequence 0 and acknowledgment 1; client sends ACK with sequence 1 and acknowledgment 1.">
+            <text class="lad-host" x="56" y="14" text-anchor="middle">CLIENT</text>
+            <text class="lad-host" x="344" y="14" text-anchor="middle">SERVER</text>
+            <line class="lad-line" x1="56" y1="24" x2="56" y2="256"/>
+            <line class="lad-line" x1="344" y1="24" x2="344" y2="256"/>
+
+            <g class="pk c2s">
+              <line class="wire" x1="60" y1="54" x2="336" y2="98"/>
+              <polygon class="head" points="340,99 326,93 328,103"/>
+              <text class="lbl" x="198" y="66" text-anchor="middle">SYN</text>
+              <text class="lbl" x="198" y="79" text-anchor="middle" style="font-weight:400;font-size:9.5px">seq=0</text>
+              <circle class="fly" r="4.5" fill="currentColor" opacity="0" style="color:var(--client)">
+                <animate attributeName="cx" values="60;336" dur="1.1s" begin="0s;h.end+0.5s"/>
+                <animate attributeName="cy" values="54;98" dur="1.1s" begin="0s;h.end+0.5s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="1.1s" begin="0s;h.end+0.5s"/>
+              </circle>
+            </g>
+
+            <g class="pk s2c">
+              <line class="wire" x1="340" y1="128" x2="64" y2="172"/>
+              <polygon class="head" points="60,173 74,167 72,177"/>
+              <text class="lbl" x="200" y="140" text-anchor="middle">SYN, ACK</text>
+              <text class="lbl" x="200" y="153" text-anchor="middle" style="font-weight:400;font-size:9.5px">seq=0  ack=1</text>
+              <circle class="fly" r="4.5" fill="currentColor" opacity="0" style="color:var(--server)">
+                <animate attributeName="cx" values="340;64" dur="1.1s" begin="1.35s;h.end+1.85s"/>
+                <animate attributeName="cy" values="128;172" dur="1.1s" begin="1.35s;h.end+1.85s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="1.1s" begin="1.35s;h.end+1.85s"/>
+              </circle>
+            </g>
+
+            <g class="pk c2s">
+              <line class="wire" x1="60" y1="202" x2="336" y2="246"/>
+              <polygon class="head" points="340,247 326,241 328,251"/>
+              <text class="lbl" x="198" y="214" text-anchor="middle">ACK</text>
+              <text class="lbl" x="198" y="227" text-anchor="middle" style="font-weight:400;font-size:9.5px">seq=1  ack=1</text>
+              <circle class="fly" r="4.5" fill="currentColor" opacity="0" style="color:var(--client)">
+                <animate attributeName="cx" values="60;336" dur="1.1s" begin="2.7s;h.end+3.2s"/>
+                <animate attributeName="cy" values="202;246" dur="1.1s" begin="2.7s;h.end+3.2s"/>
+                <animate id="h" attributeName="opacity" values="0;1;1;0" dur="1.1s" begin="2.7s;h.end+3.2s"/>
+              </circle>
+            </g>
+          </svg>
+        </div>
+        <figcaption>The three-way handshake, the one exchange every TCP connection begins with. Both sides pick a random starting sequence number and acknowledge each other&rsquo;s — after this, both agree on where the byte stream starts.</figcaption>
+      </figure>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ══════════════════ LAYERS ══════════════════ -->
+<section id="layers">
+  <div class="col sec-head">
+    <span class="eyebrow">Where TCP sits</span>
+    <h2>Four layers, four headers, one bundle of bytes</h2>
+    <p class="sec-sub">Your note said &ldquo;the application layer does not know about bottom layers — it is just an order to pass data.&rdquo; That&rsquo;s the right instinct. Here&rsquo;s the mechanism behind it.</p>
+  </div>
+  <div class="col sec-body">
+    <p>When your code calls <code>send(sock, buf, 1460)</code>, it hands 1,460 bytes to the kernel and gets an integer back. It never sees a port number, a sequence number, or a MAC address. Each layer below it <strong>prepends its own header</strong> and passes the whole thing down — a process called <strong>encapsulation</strong>. On the receiving machine the same layers strip their headers back off, in reverse.</p>
+  </div>
+
+  <figure style="margin-top:20px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 850 350" role="img" aria-label="Encapsulation diagram: an HTTP message of 1460 bytes gains a 20-byte TCP header to become a segment, then a 20-byte IP header to become a packet, then a 14-byte Ethernet header and 4-byte trailer to become a 1518-byte frame.">
+        <defs>
+          <marker id="dn" markerWidth="9" markerHeight="9" refX="4.5" refY="7" orient="auto">
+            <polygon points="0,0 9,0 4.5,8" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Row A: application -->
+        <text class="lad-phase" x="10" y="42">APPLICATION</text>
+        <text class="lad-addr" x="10" y="58" style="font-size:11px">Message</text>
+        <rect x="300" y="30" width="490" height="40" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="545" y="55" text-anchor="middle" style="font-family:var(--mono);font-size:12px;font-weight:600;fill:var(--ink-2)">GET /v1/orders HTTP/1.1 …  1,460 B</text>
+        <line x1="545" y1="74" x2="545" y2="94" stroke="currentColor" stroke-width="1.4" marker-end="url(#dn)" opacity=".45"/>
+
+        <!-- Row B: transport -->
+        <text class="lad-phase" x="10" y="122">TRANSPORT · TCP</text>
+        <text class="lad-addr" x="10" y="138" style="font-size:11px">Segment</text>
+        <rect x="240" y="110" width="60" height="40" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.5"/>
+        <text x="270" y="129" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--client)">TCP</text>
+        <text x="270" y="141" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">20 B</text>
+        <rect x="300" y="110" width="490" height="40" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="545" y="135" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:var(--ink-3)">payload — 1,460 B</text>
+        <line x1="545" y1="154" x2="545" y2="174" stroke="currentColor" stroke-width="1.4" marker-end="url(#dn)" opacity=".45"/>
+
+        <!-- Row C: internet -->
+        <text class="lad-phase" x="10" y="202">INTERNET · IPv4</text>
+        <text class="lad-addr" x="10" y="218" style="font-size:11px">Packet</text>
+        <rect x="180" y="190" width="60" height="40" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.5"/>
+        <text x="210" y="209" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--server)">IP</text>
+        <text x="210" y="221" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">20 B</text>
+        <rect x="240" y="190" width="550" height="40" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="515" y="215" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:var(--ink-3)">TCP segment — 1,480 B</text>
+        <line x1="515" y1="234" x2="515" y2="254" stroke="currentColor" stroke-width="1.4" marker-end="url(#dn)" opacity=".45"/>
+
+        <!-- Row D: link -->
+        <text class="lad-phase" x="10" y="282">LINK · ETHERNET</text>
+        <text class="lad-addr" x="10" y="298" style="font-size:11px">Frame</text>
+        <rect x="120" y="270" width="60" height="40" rx="3" fill="var(--surface-3)" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="150" y="289" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--ink-2)">ETH</text>
+        <text x="150" y="301" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--ink-2)">14 B</text>
+        <rect x="180" y="270" width="610" height="40" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="485" y="295" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:var(--ink-3)">IP packet — 1,500 B  =  the MTU</text>
+        <rect x="790" y="270" width="46" height="40" rx="3" fill="var(--surface-3)" stroke="var(--ink-3)" stroke-width="1.5"/>
+        <text x="813" y="289" text-anchor="middle" style="font-family:var(--mono);font-size:9px;font-weight:600;fill:var(--ink-2)">FCS</text>
+        <text x="813" y="301" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--ink-2)">4 B</text>
+
+        <!-- bracket -->
+        <path d="M120 322 L120 330 L836 330 L836 322" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".4"/>
+        <text x="478" y="345" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--ink-3)">1,518 bytes on the wire</text>
+      </svg>
+    </div>
+    <figcaption>Each layer wraps the one above it. The 1,500-byte <strong>MTU</strong> of a typical Ethernet link is what forces TCP&rsquo;s default <strong>MSS of 1,460</strong>: 1500 &minus; 20 (IP) &minus; 20 (TCP) = 1460 bytes of payload per segment.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <div class="fix">
+      <span class="tag">Worth refining</span>
+      <p>The application <em>is</em> insulated from TCP&rsquo;s mechanics — but it is not fully blind to them. It feels TCP through the socket API: <code>send()</code> blocks (or returns a short count) when the send buffer fills because the receiver&rsquo;s window closed; <code>TCP_NODELAY</code> switches off Nagle&rsquo;s algorithm; <code>SO_RCVBUF</code> caps the window TCP can advertise. The abstraction leaks in exactly the places where performance lives.</p>
+    </div>
+    <p>One correction on terminology that trips people up constantly. The unit of data has a different name at every layer, and using the wrong one makes trace-reading confusing:</p>
+  </div>
+
+  <div class="col" style="margin-top:14px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Layer</th><th>Unit is called</th><th>Addressing</th><th>Adds</th></tr></thead>
+        <tbody>
+          <tr><td>Application (L7)</td><td><strong>Message</strong> / data</td><td>URL, hostname</td><td class="n">— </td></tr>
+          <tr><td>Transport (L4) — TCP</td><td><strong>Segment</strong></td><td>Port <span class="m">16 bit</span></td><td class="n">20–60 B</td></tr>
+          <tr><td>Transport (L4) — UDP</td><td><strong>Datagram</strong></td><td>Port <span class="m">16 bit</span></td><td class="n">8 B</td></tr>
+          <tr><td>Internet (L3) — IPv4</td><td><strong>Packet</strong></td><td>IP address <span class="m">32 bit</span></td><td class="n">20–60 B</td></tr>
+          <tr><td>Link (L2) — Ethernet</td><td><strong>Frame</strong></td><td>MAC <span class="m">48 bit</span></td><td class="n">14 B + 4 B</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ BYTE STREAM ══════════════════ -->
+<section id="stream">
+  <div class="col sec-head">
+    <span class="eyebrow">The idea everything else hangs on</span>
+    <h2>TCP is a stream of bytes, not a stream of messages</h2>
+    <p class="sec-sub">If you take one thing from this page, take this. It explains sequence numbers, it explains why your API keeps breaking, and it is the single most common blind spot in TCP notes.</p>
+  </div>
+  <div class="col sec-body">
+    <p>TCP does not transport <em>your messages</em>. It transports <em>a numbered stream of bytes</em>. Every byte in the connection, in each direction, has its own 32-bit number. A segment is just a claim: <span class="m">&ldquo;here are bytes 4381 through 5840&rdquo;</span>.</p>
+    <p>The consequence is blunt: <strong>TCP does not preserve the boundaries of your <code>send()</code> calls.</strong> The kernel is free to merge several sends into one segment, or split one send across many. The receiver&rsquo;s <code>recv()</code> returns whatever bytes have arrived — never a guarantee of &ldquo;one message.&rdquo;</p>
+  </div>
+
+  <figure style="margin-top:22px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 820 322" role="img" aria-label="Three send calls of 700, 400 and 900 bytes are merged into one continuous byte stream, cut into a 1460-byte segment and a 540-byte segment by the maximum segment size, and delivered to the receiver as two recv calls of 1460 and 540 bytes. None of the original message boundaries survive.">
+        <defs>
+          <marker id="dn2" markerWidth="9" markerHeight="9" refX="4.5" refY="7" orient="auto">
+            <polygon points="0,0 9,0 4.5,8" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <text class="lad-phase" x="10" y="20">SENDER — APP</text>
+        <rect x="60" y="28" width="175" height="34" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.4"/>
+        <text x="147" y="49" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--client)">send() 700 B</text>
+        <rect x="235" y="28" width="100" height="34" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.4"/>
+        <text x="285" y="49" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--client)">send() 400</text>
+        <rect x="335" y="28" width="225" height="34" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.4"/>
+        <text x="447" y="49" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--client)">send() 900 B</text>
+        <text x="578" y="49" style="font-family:var(--body);font-size:11px;font-style:italic;fill:var(--ink-3)">three separate calls</text>
+        <line x1="310" y1="66" x2="310" y2="84" stroke="currentColor" stroke-width="1.3" marker-end="url(#dn2)" opacity=".45"/>
+
+        <text class="lad-phase" x="10" y="100">SEND BUFFER</text>
+        <rect x="60" y="90" width="500" height="34" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.4"/>
+        <text x="310" y="111" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)">one unbroken byte stream — 2,000 bytes, numbered 1 … 2000</text>
+        <text x="578" y="111" style="font-family:var(--body);font-size:11px;font-style:italic;fill:var(--ink-3)">boundaries erased</text>
+        <line x1="310" y1="128" x2="310" y2="146" stroke="currentColor" stroke-width="1.3" marker-end="url(#dn2)" opacity=".45"/>
+
+        <text class="lad-phase" x="10" y="162">ON THE WIRE</text>
+        <rect x="60" y="152" width="365" height="34" rx="3" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.4"/>
+        <text x="242" y="173" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--ink)">segment · seq=1 · len=1460</text>
+        <rect x="425" y="152" width="135" height="34" rx="3" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.4"/>
+        <text x="492" y="169" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--ink)">seq=1461</text>
+        <text x="492" y="180" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink)">len=540</text>
+        <text x="578" y="173" style="font-family:var(--body);font-size:11px;font-style:italic;fill:var(--ink-3)">cut at the MSS (1460)</text>
+        <line x1="310" y1="190" x2="310" y2="208" stroke="currentColor" stroke-width="1.3" marker-end="url(#dn2)" opacity=".45"/>
+
+        <text class="lad-phase" x="10" y="224">RECEIVER — APP</text>
+        <rect x="60" y="214" width="365" height="34" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.4"/>
+        <text x="242" y="235" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--server)">recv() returns 1460 B</text>
+        <rect x="425" y="214" width="135" height="34" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.4"/>
+        <text x="492" y="235" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--server)">recv() 540</text>
+        <text x="578" y="235" style="font-family:var(--body);font-size:11px;font-style:italic;fill:var(--ink-3)">two calls, wrong sizes</text>
+
+        <line x1="60" y1="272" x2="560" y2="272" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <line x1="235" y1="266" x2="235" y2="278" stroke="var(--danger)" stroke-width="1.6"/>
+        <line x1="335" y1="266" x2="335" y2="278" stroke="var(--danger)" stroke-width="1.6"/>
+        <line x1="425" y1="266" x2="425" y2="278" stroke="var(--danger)" stroke-width="1.6"/>
+        <text x="60" y="296" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--danger)">3 sends → 2 segments → 2 receives.</text>
+        <text x="60" y="312" style="font-family:var(--body);font-size:11.5px;fill:var(--ink-2)">Not one original boundary survived the trip. If your protocol needs them, you have to add them yourself.</text>
+      </svg>
+    </div>
+    <figcaption>The classic &ldquo;TCP framing&rdquo; problem. Because boundaries do not survive, every application protocol on top of TCP must re-invent them — HTTP uses <span class="m">Content-Length</span> or chunked encoding, gRPC prefixes a 5-byte length, Redis uses <span class="m">\r\n</span> terminators.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <h3>What a sequence number actually counts</h3>
+    <p>Because the unit is the byte, the sequence number field holds <strong>the number of the first data byte in this segment</strong> — not a packet counter. That single fact makes every trace readable:</p>
+    <div class="key">
+      <span class="tag">The rule</span>
+      <p style="font-family:var(--mono);font-size:.95rem">next_seq = seq + len(payload) &nbsp;&nbsp;(+1 if SYN or FIN is set)</p>
+      <p>and, on the other side: <span class="m">ack = the next byte I expect</span> — meaning &ldquo;I have every byte below this one.&rdquo;</p>
+    </div>
+    <p>SYN and FIN carry no data but each <strong>consumes one sequence number</strong> — a &ldquo;phantom byte.&rdquo; That is <em>why</em> the handshake acknowledges <span class="m">ISN + 1</span>. Your notes had the <span class="m">+1</span> right; this is the reason for it. It also means SYN and FIN are themselves retransmitted reliably, like data.</p>
+    <p>With a 32-bit field the numbers wrap after 4 GiB. On a 100 Gbit/s link that is under half a second, which is one of the reasons the <strong>Timestamps option</strong> (RFC 7323) exists — its PAWS mechanism rejects segments from a previous wrap of the sequence space.</p>
+    <div class="note">
+      <span class="tag">Reading a trace</span>
+      <p>Wireshark shows <strong>relative</strong> sequence numbers by default: it subtracts each side&rsquo;s ISN so the SYN reads <span class="m">seq=0</span>. The real number on the wire is a large random value. Toggle it under <em>Preferences &rarr; Protocols &rarr; TCP &rarr; Relative sequence numbers</em>. Every number on this page is shown both ways.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SEGMENT ══════════════════ -->
+<section id="segment">
+  <div class="col sec-head">
+    <span class="eyebrow">Anatomy</span>
+    <h2>The TCP segment, field by field</h2>
+    <p class="sec-sub">Click any field in the map. Widths are drawn to scale across the 32-bit word — this is the exact layout RFC 9293 specifies.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <h4>TCP header</h4>
+      <span class="chip">20 B minimum</span>
+      <span class="chip">60 B maximum</span>
+      <span style="flex:1"></span>
+      <span class="ctrl">click a field</span>
+    </div>
+    <div style="overflow-x:auto">
+      <div class="hdr-map" id="hdrMap">
+        <div class="hdr-ruler" aria-hidden="true">
+          <span>0</span><span></span><span></span><span>3</span><span></span><span></span><span></span><span>7</span>
+          <span></span><span></span><span></span><span>11</span><span></span><span></span><span></span><span>15</span>
+          <span></span><span></span><span></span><span>19</span><span></span><span></span><span></span><span>23</span>
+          <span></span><span></span><span></span><span>27</span><span></span><span></span><span></span><span>31</span>
+        </div>
+        <div class="hdr-row">
+          <button class="fld" data-f="sport" style="grid-column:span 16"><span class="fn">Source Port</span><span class="fb2">16 bits</span></button>
+          <button class="fld" data-f="dport" style="grid-column:span 16"><span class="fn">Destination Port</span><span class="fb2">16 bits</span></button>
+        </div>
+        <div class="hdr-row">
+          <button class="fld" data-f="seq" style="grid-column:span 32"><span class="fn">Sequence Number</span><span class="fb2">32 bits</span></button>
+        </div>
+        <div class="hdr-row">
+          <button class="fld" data-f="ack" style="grid-column:span 32"><span class="fn">Acknowledgment Number</span><span class="fb2">32 bits</span></button>
+        </div>
+        <div class="hdr-row">
+          <button class="fld" data-f="doff" style="grid-column:span 4"><span class="fn">Data Off</span><span class="fb2">4</span></button>
+          <button class="fld" data-f="rsvd" style="grid-column:span 4"><span class="fn">Rsvd</span><span class="fb2">4</span></button>
+          <button class="fld" data-f="ctrl" style="grid-column:span 8"><span class="fn">Control Bits</span><span class="fb2">8</span></button>
+          <button class="fld" data-f="win" style="grid-column:span 16"><span class="fn">Window</span><span class="fb2">16 bits</span></button>
+        </div>
+        <div class="hdr-row">
+          <button class="fld" data-f="cks" style="grid-column:span 16"><span class="fn">Checksum</span><span class="fb2">16 bits</span></button>
+          <button class="fld" data-f="urg" style="grid-column:span 16"><span class="fn">Urgent Pointer</span><span class="fb2">16 bits</span></button>
+        </div>
+        <div class="hdr-row">
+          <button class="fld var" data-f="opt" style="grid-column:span 32"><span class="fn">Options + Padding</span><span class="fb2">0 – 320 bits, in whole 32-bit words</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="hdr-detail" id="hdrDetail"></div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <div class="fix">
+      <span class="tag">Correction to your notes</span>
+      <p>You wrote <span class="m">Data offset (4) | reserved (3) | Flag | Window (16)</span>. The current spec is <strong>Data Offset (4) &middot; Reserved (4) &middot; Control Bits (8) &middot; Window (16)</strong>.</p>
+      <p>The 3-bit reserved field you noted is a real layout, just an obsolete one. The history: RFC 793 had 6 reserved bits and 6 flags. RFC 3168 (ECN, 2001) took two of them for <span class="m">ECE</span> and <span class="m">CWR</span>, leaving 4 reserved. RFC 3540 (2003) took a third for the <span class="m">NS</span> nonce-sum bit, leaving 3 — that&rsquo;s the version in most textbooks and diagrams. But <strong>RFC 8311 (2018) reclassified NS as historic</strong>, so the field is back to 4 reserved bits and 8 control bits. All four reserved bits must be sent as zero.</p>
+    </div>
+    <div class="fix">
+      <span class="tag">Correction to your notes</span>
+      <p>You wrote <span class="m">16 bit = 65535</span>. 16 bits encodes <strong>65,536 distinct values — 0 through 65,535</strong>. The 65,535 figure is the largest <em>value</em>, not the count. For ports it works out close to your number anyway, because <strong>port 0 is reserved</strong> and never used on the wire, leaving 65,535 usable ports.</p>
+    </div>
+    <p>Your reasoning on Data Offset was exactly right, so it&rsquo;s worth spelling out the arithmetic: the field counts <strong>32-bit words</strong>, not bytes. The minimum legal value is 5 (5 &times; 4 = 20 bytes, a header with no options) and the maximum a 4-bit field can hold is 15 (15 &times; 4 = 60 bytes). That 40-byte ceiling on options is a real constraint — it is why TCP extensions fight over space and why a modern SYN carrying MSS, SACK-permitted, Timestamps and Window Scale is already using 20 of the 40 bytes available.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ FLAGS ══════════════════ -->
+<section id="flags">
+  <div class="col sec-head">
+    <span class="eyebrow">Control bits</span>
+    <h2>Eight flags, and what their combinations mean</h2>
+    <p class="sec-sub">Your list had the right set — with one duplicate (PSH appeared twice) and no ordering. Order matters when you read a hex dump, so here they are in header order, most significant bit first.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-bar"><h4>Flag composer</h4><span style="flex:1"></span><button class="btn" id="flagReset">Reset</button></div>
+    <div class="panel-body stack" style="gap:14px">
+      <div class="flag-grid" id="flagGrid"></div>
+      <div class="flag-out">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+          <span style="color:var(--ink-3);font-size:.68rem;letter-spacing:.12em">BITS</span>
+          <span class="bits" id="flagBits">0 0 0 0 0 0 0 0</span>
+          <span style="color:var(--ink-3);font-size:.68rem;letter-spacing:.12em">HEX</span>
+          <span id="flagHex" style="font-weight:600">0x00</span>
+        </div>
+        <p class="verdict" id="flagVerdict">Nothing set. A segment with no control bits is illegal on a live connection — scanners send them deliberately as a &ldquo;null scan&rdquo; to fingerprint an OS by its reply.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col" style="margin-top:22px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Bit</th><th>Flag</th><th class="n">Value</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="n">7 (MSB)</td><td><strong>CWR</strong></td><td class="n">0x80</td><td>Congestion Window Reduced. Sender tells the peer it has responded to an ECN signal. RFC 3168.</td></tr>
+          <tr><td class="n">6</td><td><strong>ECE</strong></td><td class="n">0x40</td><td>ECN-Echo. &ldquo;A router marked congestion on your traffic.&rdquo; Lets the network signal congestion <em>without dropping a packet</em>.</td></tr>
+          <tr><td class="n">5</td><td><strong>URG</strong></td><td class="n">0x20</td><td>Urgent pointer field is valid. Effectively dead — RFC 6093 advises new applications not to use it.</td></tr>
+          <tr><td class="n">4</td><td><strong>ACK</strong></td><td class="n">0x10</td><td>Acknowledgment field is valid. Set on <em>every</em> segment after the initial SYN.</td></tr>
+          <tr><td class="n">3</td><td><strong>PSH</strong></td><td class="n">0x08</td><td>Push: don&rsquo;t sit on this data, hand it to the application now. Set on the last segment of a write burst.</td></tr>
+          <tr><td class="n">2</td><td><strong>RST</strong></td><td class="n">0x04</td><td>Reset — tear the connection down immediately, no four-way close, no confirmation.</td></tr>
+          <tr><td class="n">1</td><td><strong>SYN</strong></td><td class="n">0x02</td><td>Synchronize sequence numbers. Only legal in the first segment of each direction. Consumes one sequence number.</td></tr>
+          <tr><td class="n">0 (LSB)</td><td><strong>FIN</strong></td><td class="n">0x01</td><td>No more data <em>from me</em>. Half-closes this direction only. Consumes one sequence number.</td></tr>
+          <tr style="opacity:.62"><td class="n">—</td><td><strong>NS</strong></td><td class="n">—</td><td><em>Historic.</em> The ECN nonce-sum bit from RFC 3540, reclassified as historic by RFC 8311 in 2018. Its bit went back to the reserved field. Still drawn in most textbooks.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:20px">
+    <div class="note">
+      <span class="tag">PSH is not what most people think</span>
+      <p>PSH does not mean &ldquo;important&rdquo; or &ldquo;send faster.&rdquo; It is a delivery hint to the <em>receiving</em> kernel: stop buffering, wake the blocked <code>recv()</code>. On modern stacks the sender sets it automatically when its send buffer empties, so in a trace you will see PSH on the last segment of each response body. You cannot control it portably from the socket API.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ PORTS ══════════════════ -->
+<section id="ports">
+  <div class="col sec-head">
+    <span class="eyebrow">Addressing</span>
+    <h2>65,536 doors, and how a connection picks two</h2>
+    <p class="sec-sub">Your port ranges were all correct. What&rsquo;s worth adding is the reason they exist, what your OS actually does, and the four-tuple that makes it all work.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>A port is 16 bits, so the space runs 0 – 65535. IANA splits it into three ranges — drawn here <strong>to scale</strong>, which is more revealing than a list:</p>
+  </div>
+
+  <div style="margin-top:16px">
+    <div class="portbar" role="img" aria-label="The 65536-port space drawn to scale: well-known ports 0 to 1023 occupy 1.6 percent, registered ports 1024 to 49151 occupy 73 percent, and dynamic ephemeral ports 49152 to 65535 occupy 25 percent.">
+      <div class="portseg well" style="flex:1024 0 0"></div>
+      <div class="portseg reg" style="flex:48128 0 0"><span>REGISTERED &nbsp;1024 – 49151&nbsp; · 73%</span></div>
+      <div class="portseg eph" style="flex:16384 0 0"><span>DYNAMIC &nbsp;49152 – 65535&nbsp; · 25%</span></div>
+    </div>
+    <div class="porttick"><span>0</span><span style="margin-left:-14%">↑ well-known 0–1023 · just 1.6%</span><span>65535</span></div>
+  </div>
+
+  <div class="grid2" style="margin-top:24px">
+    <div class="panel">
+      <div class="panel-bar"><h4>Well-known · 0–1023</h4><span class="chip c">needs root on Unix</span></div>
+      <div class="tbl-scroll" style="border:0;border-radius:0">
+        <table>
+          <tbody>
+            <tr><td class="n">20 / 21</td><td>FTP data / control</td></tr>
+            <tr><td class="n">22</td><td>SSH</td></tr>
+            <tr><td class="n">23</td><td>Telnet <span style="color:var(--ink-3)">— plaintext, effectively retired</span></td></tr>
+            <tr><td class="n">25</td><td>SMTP</td></tr>
+            <tr><td class="n">53</td><td>DNS <span style="color:var(--ink-3)">— UDP normally, TCP for zone transfers and large replies</span></td></tr>
+            <tr><td class="n">80</td><td>HTTP</td></tr>
+            <tr><td class="n">110 / 143</td><td>POP3 / IMAP</td></tr>
+            <tr><td class="n">443</td><td>HTTPS <span style="color:var(--ink-3)">— and HTTP/3 over QUIC/UDP</span></td></tr>
+            <tr><td class="n">993 / 995</td><td>IMAPS / POP3S</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-bar"><h4>Registered · 1024–49151</h4><span class="chip">any user may bind</span></div>
+      <div class="tbl-scroll" style="border:0;border-radius:0">
+        <table>
+          <tbody>
+            <tr><td class="n">1433</td><td>Microsoft SQL Server</td></tr>
+            <tr><td class="n">1521</td><td>Oracle DB</td></tr>
+            <tr><td class="n">3306</td><td>MySQL / MariaDB</td></tr>
+            <tr><td class="n">5432</td><td>PostgreSQL</td></tr>
+            <tr><td class="n">6379</td><td>Redis</td></tr>
+            <tr><td class="n">8080 / 8443</td><td>HTTP / HTTPS alternates</td></tr>
+            <tr><td class="n">9092</td><td>Apache Kafka</td></tr>
+            <tr><td class="n">27017</td><td>MongoDB</td></tr>
+            <tr><td class="n">5672</td><td>AMQP / RabbitMQ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>The four-tuple: what &ldquo;a connection&rdquo; really is</h3>
+    <p>A TCP connection is not identified by a port. It is identified by <strong>four values together</strong>:</p>
+    <pre><span class="cl">( source IP , source port )</span>  ⟷  <span class="sv">( destination IP , destination port )</span></pre>
+    <p>Change any one of the four and it is a different connection with its own sequence space, its own window, and its own state machine. This is why a thousand browsers can all talk to <span class="m">203.0.113.42:443</span> at once, and why one browser can open six connections to the same server:</p>
+  </div>
+
+  <div class="col" style="margin-top:14px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Source IP</th><th class="n">Src port</th><th>Dest IP</th><th class="n">Dst port</th><th>Identity</th></tr></thead>
+        <tbody>
+          <tr><td class="n">198.51.100.7</td><td class="n" style="color:var(--client);font-weight:600">52741</td><td class="n">203.0.113.42</td><td class="n">443</td><td>connection A</td></tr>
+          <tr><td class="n">198.51.100.7</td><td class="n" style="color:var(--client);font-weight:600">52742</td><td class="n">203.0.113.42</td><td class="n">443</td><td>connection B — same laptop, same server</td></tr>
+          <tr><td class="n">198.51.100.9</td><td class="n" style="color:var(--client);font-weight:600">52741</td><td class="n">203.0.113.42</td><td class="n">443</td><td>connection C — different machine, same port number, no conflict</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>Ephemeral ports — refining your note</h3>
+    <div class="fix">
+      <span class="tag">Correction to your notes</span>
+      <p>You wrote that Chrome or a mobile app &ldquo;does not use a port&rdquo; until it makes a request. More precisely: <strong>a client does not <em>listen</em> on a port</strong> — it has no <code>bind()</code> + <code>listen()</code> socket waiting for inbound connections. But the moment it opens a connection, the kernel <strong>must</strong> assign it a local source port, because the four-tuple needs one. It picks an unused one from the ephemeral range. So the port is allocated per <em>connection</em>, not per <em>application</em>, and it is released back to the pool when the connection finishes its TIME_WAIT.</p>
+    </div>
+    <p>The IANA dynamic range is 49152–65535, exactly as you noted. Real operating systems mostly ignore it:</p>
+  </div>
+
+  <div class="col" style="margin-top:14px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>System</th><th class="n">Default ephemeral range</th><th class="n">Count</th><th>Where to look</th></tr></thead>
+        <tbody>
+          <tr><td>Linux</td><td class="n">32768 – 60999</td><td class="n">28,232</td><td><span class="m">net.ipv4.ip_local_port_range</span></td></tr>
+          <tr><td>Windows (Vista+)</td><td class="n">49152 – 65535</td><td class="n">16,384</td><td><span class="m">netsh int ipv4 show dynamicport tcp</span></td></tr>
+          <tr><td>macOS / FreeBSD</td><td class="n">49152 – 65535</td><td class="n">16,384</td><td><span class="m">sysctl net.inet.ip.portrange</span></td></tr>
+          <tr><td>IANA recommendation</td><td class="n">49152 – 65535</td><td class="n">16,384</td><td>RFC 6335</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:20px">
+    <div class="note">
+      <span class="tag">Why this matters in production</span>
+      <p>A busy proxy or API gateway opening connections to <em>one</em> upstream <span class="m">IP:port</span> can only vary the source port — so it caps out at roughly 28,000 concurrent connections on Linux, minus everything stuck in TIME_WAIT for 60 seconds. That is the real cause of the classic <span class="m">EADDRNOTAVAIL / Cannot assign requested address</span> error under load. The fixes are connection pooling and keep-alive (fewer connections), widening <span class="m">ip_local_port_range</span>, or adding upstream IPs.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ THE LAB ══════════════════ -->
+<section id="lab">
+  <div class="col sec-head">
+    <span class="eyebrow">The Lab</span>
+    <h2>One whole connection, packet by packet</h2>
+    <p class="sec-sub">A complete, realistic trace: a browser fetches a 9.4 KB JSON response over HTTP. It includes a dropped segment, three duplicate ACKs, a fast retransmit and a full four-way close. The whole trace is drawn below — press <strong>Play</strong> to watch it happen in order, or click any arrow to decode its header.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <h4>tcp.stream eq 0</h4>
+      <button class="btn primary" id="labPlay">▶&nbsp; Play</button>
+      <button class="btn" id="labStep">Step ▸</button>
+      <button class="btn" id="labReset">Reset</button>
+      <span class="ctrl">Speed
+        <input type="range" id="labSpeed" min="1" max="12" value="6" aria-label="Playback speed" style="width:82px">
+      </span>
+      <span style="flex:1"></span>
+      <span class="chip" id="labClock">25 / 25 segments</span>
+    </div>
+
+    <div class="lab">
+      <div class="lab-left">
+        <div class="state-row">
+          <div class="state-cell c">
+            <span class="who">Client · 198.51.100.7 : 52741</span>
+            <span class="st" id="stC">CLOSED</span>
+          </div>
+          <div class="state-cell s">
+            <span class="who">Server · 203.0.113.42 : 80</span>
+            <span class="st" id="stS">LISTEN</span>
+          </div>
+        </div>
+        <div class="ladder-scroll" id="ladScroll">
+          <svg id="ladder" role="img" aria-label="Sequence diagram of a complete TCP connection: three-way handshake, an HTTP GET request, six response segments of which one is lost, three duplicate acknowledgments, a fast retransmit, the tail of the response, and a four-way close ending in TIME_WAIT."></svg>
+        </div>
+      </div>
+
+      <aside class="insp">
+        <div class="insp-head">
+          <div class="insp-title" id="inspTitle">—</div>
+          <p class="insp-why" id="inspWhy">Select a segment.</p>
+        </div>
+        <div class="insp-body" id="inspBody"></div>
+      </aside>
+    </div>
+
+    <div class="panel-foot">
+      Time runs downward; the slope of each arrow is the one-way network delay. Segments sent before the previous one is acknowledged are <strong>in flight together</strong> — that is the sliding window doing its job.
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <div class="key">
+      <span class="tag">Read the shape, not just the labels</span>
+      <p>Three things in that picture are the whole of TCP. <strong>The steep opening</strong> — one round trip spent before a single byte of data moves. <strong>The dense middle</strong> — six segments leaving back-to-back without waiting for a reply, because the window allows it. <strong>The gap</strong> — one arrow that stops halfway, and the three near-identical ACKs that follow, which is how the sender learns of a loss without any router ever telling it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ OPEN ══════════════════ -->
+<section id="open">
+  <div class="col sec-head">
+    <span class="eyebrow">Opening a connection</span>
+    <h2>Why the handshake needs exactly three messages</h2>
+    <p class="sec-sub">Your handshake diagram was correct. Here is what each of the three segments is actually <em>for</em>, and the one number in your worked example that was swapped.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The handshake is not a greeting. It exists to solve one specific problem: <strong>both sides must agree on where their byte stream starts, and each must confirm that the other heard it.</strong> That takes three messages, not two, and not four.</p>
+    <ol>
+      <li><strong>SYN</strong> — the client proposes its Initial Sequence Number (ISN). <em>Client&rsquo;s number sent, unconfirmed.</em></li>
+      <li><strong>SYN + ACK</strong> — the server acknowledges the client&rsquo;s ISN <em>and</em> proposes its own, in one segment. <em>Client&rsquo;s number confirmed; server&rsquo;s number sent, unconfirmed.</em></li>
+      <li><strong>ACK</strong> — the client confirms the server&rsquo;s ISN. <em>Both confirmed. Connection established.</em></li>
+    </ol>
+    <p>Two messages would leave the server&rsquo;s ISN unconfirmed. Four would be redundant, because step 2 piggybacks two jobs onto one segment. Three is the minimum — this is a general result for reliable connection setup, not a TCP quirk.</p>
+
+    <div class="fix">
+      <span class="tag">Correction to your notes</span>
+      <p>Your worked example had the client using ephemeral port <span class="m">50123</span> and the server on <span class="m">3000</span>. The SYN+ACK line was right (<span class="m">S-3000 → D-50123</span>), but the final ACK repeated it. The third segment is sent <em>by the client</em>, so the ports flip back:</p>
+      <pre><span class="cm">1.</span> <span class="cl">SYN</span>       src <span class="cl">50123</span> → dst <span class="sv">3000</span>    seq=1000  ack=—
+<span class="cm">2.</span> <span class="sv">SYN, ACK</span>  src <span class="sv">3000</span>  → dst <span class="cl">50123</span>   seq=2000  ack=1001
+<span class="cm">3.</span> <span class="cl">ACK</span>       src <span class="cl">50123</span> → dst <span class="sv">3000</span>    seq=1001  ack=2001   <b>← ports flip back</b></pre>
+      <p>Your sequence and acknowledgment numbers were exactly right. Source and destination ports always swap with direction — that is how the receiving kernel finds the right socket in its connection table.</p>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>The ISN is not really random</h3>
+    <p>You wrote that the sender &ldquo;selects a Sequence number randomly within 32 bits.&rdquo; Close, and the intent is right — but a purely random ISN turned out to be a security hole. If an attacker can guess your ISN, they can inject forged segments into your connection without ever seeing it (the 1994 Mitnick attack).</p>
+    <p>RFC 6528 specifies what stacks actually do:</p>
+    <pre>ISN = M + F( localIP, localPort, remoteIP, remotePort, secretKey )
+
+  M = a 4-microsecond timer  <span class="cm">— always moving forward</span>
+  F = a cryptographic hash   <span class="cm">— unguessable, but stable per four-tuple</span></pre>
+    <p>The timer component keeps ISNs increasing over time so that an old, delayed segment from a previous connection on the same four-tuple can&rsquo;t be mistaken for a new one. The hash component makes it unguessable from outside. So: <em>unpredictable</em>, yes; <em>random</em>, not quite.</p>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>What the server is really doing: two queues</h3>
+    <p>&ldquo;The server accepts the connection&rdquo; hides a detail that matters when things go wrong. The kernel keeps <strong>two</strong> queues per listening socket:</p>
+  </div>
+
+  <figure style="margin-top:16px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 820 250" role="img" aria-label="A SYN arriving at a listening socket creates a half-open entry in the SYN queue; when the final ACK arrives the connection moves to the accept queue, where the application's accept call removes it.">
+        <defs>
+          <marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+            <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+          </marker>
+        </defs>
+        <text class="lad-phase" x="14" y="30">INBOUND</text>
+        <rect x="14" y="42" width="118" height="46" rx="4" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.5"/>
+        <text x="73" y="63" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--client)">SYN</text>
+        <text x="73" y="78" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--client)">from client</text>
+
+        <line x1="140" y1="65" x2="212" y2="65" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)" opacity=".55"/>
+        <text x="176" y="56" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--ink-3)">reply SYN,ACK</text>
+
+        <rect x="220" y="30" width="220" height="70" rx="4" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="330" y="52" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ink)">SYN queue</text>
+        <text x="330" y="68" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)">half-open · SYN-RECEIVED</text>
+        <text x="330" y="83" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--ink-3)">net.ipv4.tcp_max_syn_backlog</text>
+
+        <line x1="330" y1="108" x2="330" y2="140" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)" opacity=".55"/>
+        <text x="342" y="128" style="font-family:var(--mono);font-size:9px;fill:var(--ink-3)">final ACK arrives</text>
+
+        <rect x="220" y="148" width="220" height="70" rx="4" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.5"/>
+        <text x="330" y="170" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--server)">Accept queue</text>
+        <text x="330" y="186" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--server)">fully established, waiting</text>
+        <text x="330" y="201" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--ink-3)">listen(fd, backlog)</text>
+
+        <line x1="448" y1="183" x2="520" y2="183" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)" opacity=".55"/>
+        <rect x="528" y="148" width="200" height="70" rx="4" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/>
+        <text x="628" y="176" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ink)">accept()</text>
+        <text x="628" y="192" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)">your application</text>
+
+        <rect x="528" y="30" width="272" height="70" rx="4" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <text x="664" y="52" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--danger)">SYN flood</text>
+        <text x="664" y="68" text-anchor="middle" style="font-family:var(--body);font-size:10.5px;fill:var(--danger)">SYNs that never send the final ACK</text>
+        <text x="664" y="83" text-anchor="middle" style="font-family:var(--body);font-size:10.5px;fill:var(--danger)">fill this queue → SYN cookies engage</text>
+        <line x1="444" y1="62" x2="522" y2="62" stroke="var(--danger)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)" opacity=".8"/>
+      </svg>
+    </div>
+    <figcaption>Two queues, two different failure modes. A full <strong>accept queue</strong> means your application is too slow to call <code>accept()</code>; a full <strong>SYN queue</strong> usually means half-open connections are piling up. Check both with <span class="m">ss -lnt</span> — the <span class="m">Recv-Q</span> column on a listening socket is the accept-queue depth, <span class="m">Send-Q</span> is its limit.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <div class="note">
+      <span class="tag">SYN cookies</span>
+      <p>When the SYN queue overflows, Linux can stop allocating memory per half-open connection entirely. It encodes the connection state <em>into the ISN it sends back</em> — a hash of the four-tuple plus a coarse timestamp and an MSS index. If the client&rsquo;s final ACK comes back with <span class="m">ack = cookie + 1</span>, the server recomputes the hash, confirms it, and builds the connection state on the spot. A flood of forged SYNs then costs the server no memory at all. The tradeoff: options negotiated in the original SYN (window scale, SACK, timestamps) mostly can&rsquo;t be recovered, so cookie-built connections perform worse. It is an emergency valve, not a default: <span class="m">net.ipv4.tcp_syncookies = 1</span>.</p>
+    </div>
+    <div class="note">
+      <span class="tag">Skipping the wait: TCP Fast Open</span>
+      <p>RFC 7413 lets a client carry <em>data in the SYN itself</em>. On a first visit the server hands out a cookie; on later visits the client sends <span class="m">SYN + cookie + the HTTP request</span> together, and the server can start replying before the handshake finishes — saving a full round trip. Support is patchy because middleboxes drop SYNs carrying unfamiliar options, and QUIC&rsquo;s 0-RTT largely replaced the idea.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SENDING ══════════════════ -->
+<section id="send">
+  <div class="col sec-head">
+    <span class="eyebrow">Moving data</span>
+    <h2>The sliding window, and who is allowed to send what</h2>
+    <p class="sec-sub">Your note — &ldquo;the source can send that amount of data without ACK&rdquo; — is the right mental model for flow control. It&rsquo;s half of the real answer.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>Without a window, TCP would be stop-and-wait: send a segment, wait for its ACK, send the next. On a link with 50&nbsp;ms of round-trip delay that caps you at about 1,460 bytes per 50&nbsp;ms &mdash; roughly <strong>230&nbsp;kbit/s</strong>, no matter how fast the wire is.</p>
+    <p>The window fixes this. The receiver advertises how many bytes it can absorb, and the sender may have that many <strong>in flight, unacknowledged, at once</strong>. As ACKs come back the window <em>slides</em> forward and more can go out.</p>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-bar">
+      <h4>Sender&rsquo;s send window</h4>
+      <button class="btn primary" id="winPlay">❚❚&nbsp; Pause</button>
+      <span class="ctrl">Advertised window
+        <input type="range" id="winSize" min="2" max="20" value="10" aria-label="Receive window size" style="width:96px">
+        <b id="winSizeOut" style="color:var(--ink);font-weight:600">10 KB</b>
+      </span>
+      <span style="flex:1"></span>
+      <button class="btn" id="winZero" aria-pressed="false">Stall the receiver</button>
+    </div>
+    <div class="panel-body stack" style="gap:12px">
+      <div class="strip" id="winStrip" role="img" aria-label="A byte stream strip showing acknowledged bytes, bytes in flight, the usable window, and bytes that cannot be sent yet."></div>
+      <div class="legend">
+        <span><i style="background:var(--surface-3)"></i>1 · sent &amp; ACKed</span>
+        <span><i style="background:var(--client)"></i>2 · sent, in flight</span>
+        <span><i style="background:var(--client-soft)"></i>3 · usable window — may send now</span>
+        <span><i style="background:var(--surface)"></i>4 · outside the window — must wait</span>
+      </div>
+      <div class="win-nums">
+        <span>SND.UNA <b id="winUna">0</b></span>
+        <span>SND.NXT <b id="winNxt">0</b></span>
+        <span>in flight <b id="winFly">0 KB</b></span>
+        <span>usable <b id="winUse">0 KB</b></span>
+        <span id="winMsg" style="color:var(--danger)"></span>
+      </div>
+    </div>
+    <div class="panel-foot" id="winFoot">Regions 2 + 3 together are the advertised window. Its left edge moves when an ACK arrives; its right edge moves when the receiver advertises more room.</div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <div class="fix">
+      <span class="tag">Correction to your notes</span>
+      <p>You wrote &ldquo;the destination port will say the window size.&rdquo; The window is not a property of a port or of one side. <strong>Every segment carries the sender&rsquo;s own receive window</strong> — so the client tells the server how much <em>the client</em> can accept, and the server tells the client how much <em>the server</em> can accept, continuously, in both directions, on every single segment including pure ACKs.</p>
+    </div>
+    <div class="fix">
+      <span class="tag">The bigger correction</span>
+      <p>The receiver&rsquo;s window is only <em>one</em> of two limits. The real amount a sender may have outstanding is:</p>
+      <pre style="background:var(--surface);margin-top:4px">in flight  ≤  min( <b>rwnd</b> , <b>cwnd</b> )
+
+ rwnd — <span class="cm">receive window: "how much can you buffer?"  → flow control, set by the receiver</span>
+ cwnd — <span class="cm">congestion window: "how much can the network carry?" → congestion control, guessed by the sender</span></pre>
+      <p><strong>cwnd is never transmitted.</strong> There is no field for it in the header — it is a private variable each sender maintains, adjusted by inference from ACKs and losses. Almost every real transfer is limited by <em>cwnd</em>, not by the advertised window. That&rsquo;s the next section.</p>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>65,535 bytes was not enough</h3>
+    <p>The window field is 16 bits, so the largest window it can express is 65,535 bytes. Consider a 1&nbsp;Gbit/s link with a 100&nbsp;ms round trip. The <strong>bandwidth-delay product</strong> — the amount of data that must be in flight to keep the pipe full — is:</p>
+    <pre>1,000,000,000 bit/s × 0.1 s ÷ 8  =  12,500,000 bytes  ≈ 12.5 MB</pre>
+    <p>A 64&nbsp;KB window would use about <strong>0.5%</strong> of that link. The fix is the <strong>Window Scale option</strong> (RFC 7323): each side sends a shift count <span class="m">S</span> in its SYN, and from then on every window field is multiplied by <span class="m">2<sup>S</sup></span>. With the maximum <span class="m">S = 14</span> the window reaches 1&nbsp;GiB.</p>
+    <div class="note">
+      <span class="tag">Two gotchas that bite in practice</span>
+      <p><strong>The SYN&rsquo;s own window field is never scaled</strong> — scaling only applies to segments after the handshake, because the option hasn&rsquo;t been agreed yet when the SYN is sent. And <strong>scaling is only enabled if both sides offer it</strong>; if a middlebox strips the option from one SYN, the connection silently falls back to 64&nbsp;KB windows and a fast link mysteriously runs at a few Mbit/s. This is why the raw field and the scaled value are shown separately in the Lab inspector above.</p>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>When the window hits zero</h3>
+    <p>If the receiving application stops calling <code>recv()</code>, the kernel&rsquo;s receive buffer fills and it advertises <span class="m">win=0</span>. The sender must stop — and now there&rsquo;s a deadlock risk, because the segment that <em>re-opens</em> the window is an ACK, and ACKs are not retransmitted. If it is lost, both sides wait forever.</p>
+    <p>TCP breaks this with the <strong>persist timer</strong>. The sender periodically transmits a <strong>window probe</strong>: a one-byte segment sent deliberately outside the window, purely to force the receiver to reply with a current window advertisement. Try it above with &ldquo;Stall the receiver.&rdquo;</p>
+    <p>The related pathology is <strong>silly window syndrome</strong>: a receiver that frees 1 byte and immediately advertises <span class="m">win=1</span> invites a 1-byte segment carrying 40 bytes of header. Both ends defend against it — receivers withhold small window updates until a meaningful amount of space is free (David Clark&rsquo;s rule), and senders refuse to send tiny segments (Nagle&rsquo;s algorithm).</p>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>Nagle and delayed ACK: the classic 40&nbsp;ms stall</h3>
+    <p>Two optimisations that are individually sensible and together pathological — this is the single most common cause of &ldquo;my API is mysteriously slow by exactly 40 milliseconds.&rdquo;</p>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h4>Nagle&rsquo;s algorithm <span class="chip c">sender</span></h4>
+      <p>&ldquo;Don&rsquo;t send a small segment while I have unacknowledged data outstanding — coalesce it with what comes next.&rdquo; Stops a telnet session from sending a 41-byte packet per keystroke. On by default; disable with <span class="m">TCP_NODELAY</span>.</p>
+    </div>
+    <div class="card">
+      <h4>Delayed ACK <span class="chip s">receiver</span></h4>
+      <p>&ldquo;Don&rsquo;t ACK immediately — wait up to 40–200&nbsp;ms in case I get a second segment to acknowledge, or some data to piggyback the ACK onto.&rdquo; Halves the number of pure-ACK packets. On by default; Linux has <span class="m">TCP_QUICKACK</span>, which is not sticky.</p>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:16px">
+    <p>Now put them together. Your client writes a request in two <code>send()</code> calls — headers, then body:</p>
+    <pre><span class="cl">client</span> → sends chunk 1 immediately        <span class="cm">(nothing outstanding, so Nagle allows it)</span>
+<span class="cl">client</span> → chunk 2 is small and chunk 1 is unACKed  <span class="cm">→ Nagle holds it back</span>
+<span class="sv">server</span> → has only one segment, no data to piggyback  <span class="cm">→ delayed ACK holds the ACK</span>
+       ⋯ <b>40 ms of nothing</b> ⋯
+<span class="sv">server</span> → delayed-ACK timer fires, sends the ACK
+<span class="cl">client</span> → Nagle releases chunk 2</pre>
+    <p>The fix is almost never <span class="m">TCP_NODELAY</span> alone — it is <strong>writing the whole message in one <code>send()</code></strong> (or one <code>writev()</code>). Nagle only holds back <em>small</em> writes that follow unacknowledged data; a single full write never trips it. Set <span class="m">TCP_NODELAY</span> as well for interactive and RPC workloads, where latency beats packet efficiency.</p>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>MSS, MTU, and the segment size that actually gets used</h3>
+    <p>The <strong>MSS</strong> option in the SYN says &ldquo;the largest payload I am willing to receive in one segment.&rdquo; It is <em>not</em> negotiated to a common value — each side states its own, and each respects the other&rsquo;s.</p>
+  </div>
+
+  <div class="col" style="margin-top:14px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Path</th><th class="n">MTU</th><th class="n">IPv4 MSS</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Ethernet</td><td class="n">1500</td><td class="n">1460</td><td>1500 − 20 (IP) − 20 (TCP)</td></tr>
+          <tr><td>Ethernet, IPv6</td><td class="n">1500</td><td class="n">1440</td><td>the IPv6 header is 40 bytes</td></tr>
+          <tr><td>PPPoE (DSL)</td><td class="n">1492</td><td class="n">1452</td><td>8 bytes of PPPoE overhead</td></tr>
+          <tr><td>Typical VPN / WireGuard</td><td class="n">1420</td><td class="n">1380</td><td>tunnel encapsulation</td></tr>
+          <tr><td>Loopback</td><td class="n">65536</td><td class="n">65495</td><td>never leaves the machine</td></tr>
+          <tr><td>Jumbo frames (datacenter)</td><td class="n">9000</td><td class="n">8960</td><td>fewer, larger segments</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:20px">
+    <div class="note">
+      <span class="tag">The PMTU black hole</span>
+      <p>If a router along the path has a smaller MTU than your segment and the packet has <span class="m">DF</span> (don&rsquo;t fragment) set, the router is supposed to drop it and reply with <strong>ICMP Type 3 Code 4</strong>, &ldquo;fragmentation needed,&rdquo; carrying the correct MTU. Path MTU Discovery relies on this. When a firewall blocks all ICMP — an extremely common misconfiguration — the sender never hears anything. The handshake succeeds (small packets), then the first full-size data segment vanishes silently and the connection hangs. Symptom to recognise: <strong>small requests work, large ones stall forever.</strong> Linux mitigates this with <span class="m">net.ipv4.tcp_mtu_probing = 1</span>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ LOSS ══════════════════ -->
+<section id="loss">
+  <div class="col sec-head">
+    <span class="eyebrow">Reliability &amp; congestion</span>
+    <h2>How TCP notices a packet vanished — and what it does next</h2>
+    <p class="sec-sub">Nothing on the network tells the sender a packet was dropped. No router sends a complaint. TCP has to <em>infer</em> loss, and its entire performance character comes from how it does that.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>There are exactly two signals, and they mean very different things.</p>
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="card" style="border-left:3px solid var(--danger)">
+      <h4>1 · The retransmission timer expires</h4>
+      <p>The sender started a clock when it sent the segment. The clock ran out with no ACK. This is the slow, pessimistic signal: TCP assumes the network is badly congested, collapses <span class="m">cwnd</span> to 1 segment, and restarts slow start. It also <strong>doubles the timer</strong> for the next attempt — exponential backoff.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--client)">
+      <h4>2 · Three duplicate ACKs arrive</h4>
+      <p>Later segments <em>did</em> get through, so the receiver keeps re-acknowledging the same byte — the hole. Since data is still flowing, the path clearly works. This is the fast, optimistic signal: retransmit immediately without waiting for the timer, and halve <span class="m">cwnd</span> rather than collapsing it. This is <strong>fast retransmit</strong>, and it is what happens in the Lab trace above.</p>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>Why <em>three</em> duplicate ACKs?</h3>
+    <p>Because the network reorders packets. If segments 3 and 4 simply arrive in the wrong order, the receiver emits <em>one</em> duplicate ACK and then everything is fine — retransmitting on the first duplicate would waste bandwidth constantly. Three duplicates is an empirical threshold: reordering that deep is rare, real loss that shallow is common. It is a heuristic, tuned by measurement, not a proof.</p>
+
+    <h3 style="margin-top:22px">The retransmission timeout is a moving estimate</h3>
+    <p>How long should the sender wait before declaring a segment lost? Too short and it floods the network with needless copies; too long and every loss costs seconds. TCP measures the round trip continuously and tracks both its average and its <em>variance</em> (RFC 6298, from Jacobson and Karels&rsquo; 1988 work):</p>
+    <pre>on every RTT sample R:
+  RTTVAR = 0.75 × RTTVAR + 0.25 × |SRTT − R|   <span class="cm">how jittery is this path?</span>
+  SRTT   = 0.875 × SRTT   + 0.125 × R          <span class="cm">smoothed round-trip time</span>
+
+  RTO    = SRTT + 4 × RTTVAR                   <span class="cm">then clamped to ≥ 1 s</span></pre>
+    <p>Including the variance term is the crucial part: a path with a steady 200&nbsp;ms RTT gets a tight timeout, while a jittery mobile link with the same average gets a generous one. Before 1988, TCP used the average alone and the internet suffered repeated <strong>congestion collapse</strong> — senders timing out early, retransmitting, and making the congestion worse.</p>
+    <div class="note">
+      <span class="tag">Karn&rsquo;s algorithm</span>
+      <p>Never take an RTT sample from a <em>retransmitted</em> segment. When the ACK arrives you cannot tell whether it answers the original or the copy, so the sample would be garbage in either direction. TCP simply discards those samples — and relies on the Timestamps option, which stamps each segment so the ambiguity disappears entirely.</p>
+    </div>
+
+    <h3 style="margin-top:26px">SACK: telling the sender exactly what&rsquo;s missing</h3>
+    <p>A plain ACK is purely cumulative — <span class="m">ack=2921</span> means &ldquo;I have everything below 2921&rdquo; and says nothing about what arrived <em>after</em> the hole. Without more information a sender that loses two segments in one window may end up retransmitting an entire window of data it already delivered successfully.</p>
+    <p><strong>Selective Acknowledgment</strong> (RFC 2018) fixes this. Both sides advertise <span class="m">SACK-permitted</span> in their SYN; afterwards the receiver can attach up to <em>three or four</em> blocks of already-received byte ranges as a TCP option:</p>
+    <pre><span class="cl">ACK</span> ack=<b>2921</b>  SACK=<b>4381–8761</b>
+
+  <span class="cm">"I'm missing 2921–4380. I already have 4381 through 8760 — don't resend those."</span></pre>
+    <p>The sender retransmits precisely the hole. In the Lab trace above, watch the SACK block on the three duplicate ACKs grow as each later segment arrives — that is the receiver narrowing down the damage in real time.</p>
+  </div>
+
+  <div class="col sec-head" style="padding-top:44px">
+    <span class="eyebrow">Congestion control</span>
+    <h2>The sawtooth</h2>
+    <p class="sec-sub">Flow control protects the <em>receiver</em>. Congestion control protects the <em>network</em> — and it is the part with no header field at all.</p>
+  </div>
+
+  <figure style="margin-top:8px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 820 360" role="img" aria-label="Congestion window over time. It doubles each round trip during slow start from 10 to 40 segments, drops to 20 on three duplicate ACKs, then grows by one segment per round trip to 30, halves again to 15, grows to 21, then a retransmission timeout collapses it to 1 segment and slow start restarts.">
+        <rect class="cw-band" x="70" y="30" width="55.4" height="250" fill="var(--server-soft)"/>
+        <rect class="cw-band" x="651.5" y="30" width="110.8" height="250" fill="var(--server-soft)"/>
+
+        <line class="cw-grid" x1="70" y1="223.2" x2="790" y2="223.2"/>
+        <line class="cw-grid" x1="70" y1="166.4" x2="790" y2="166.4"/>
+        <line class="cw-grid" x1="70" y1="109.5" x2="790" y2="109.5"/>
+        <line class="cw-grid" x1="70" y1="52.7" x2="790" y2="52.7"/>
+
+        <line class="cw-ax" x1="70" y1="30" x2="70" y2="280"/>
+        <line class="cw-ax" x1="70" y1="280" x2="790" y2="280"/>
+
+        <text class="cw-t" x="62" y="284" text-anchor="end">0</text>
+        <text class="cw-t" x="62" y="227" text-anchor="end">10</text>
+        <text class="cw-t" x="62" y="170" text-anchor="end">20</text>
+        <text class="cw-t" x="62" y="113" text-anchor="end">30</text>
+        <text class="cw-t" x="62" y="57" text-anchor="end">40</text>
+        <text class="cw-t b" x="20" y="34">cwnd</text>
+        <text class="cw-t" x="20" y="47">segments</text>
+
+        <text class="cw-t" x="70" y="298" text-anchor="middle">0</text>
+        <text class="cw-t" x="208.5" y="298" text-anchor="middle">5</text>
+        <text class="cw-t" x="346.9" y="298" text-anchor="middle">10</text>
+        <text class="cw-t" x="485.4" y="298" text-anchor="middle">15</text>
+        <text class="cw-t" x="623.8" y="298" text-anchor="middle">20</text>
+        <text class="cw-t" x="762.3" y="298" text-anchor="middle">25</text>
+        <text class="cw-t b" x="430" y="318" text-anchor="middle">round trips elapsed</text>
+
+        <polyline class="cw-ss" points="125.4,166.4 430,166.4 430,194.8 623.8,194.8 623.8,223.2 790,223.2"/>
+        <text class="cw-t" x="440" y="209" style="fill:var(--server)">ssthresh</text>
+
+        <polyline class="cw-line" points="70,223.2 97.7,166.4 125.4,52.7 153.1,166.4 180.8,160.7 208.5,155 236.2,149.3 263.8,143.6 291.5,137.9 319.2,132.3 346.9,126.6 374.6,120.9 402.3,115.2 430,109.5 457.7,194.8 485.4,189.1 513.1,183.4 540.8,177.7 568.5,172.1 596.2,166.4 623.8,160.7 651.5,274.3 679.2,268.6 706.9,257.3 734.6,234.5 762.3,223.2 790,217.5"/>
+
+        <circle class="cw-dot" cx="125.4" cy="52.7" r="4.5"/>
+        <circle class="cw-dot" cx="430" cy="109.5" r="4.5"/>
+        <circle class="cw-dot" cx="623.8" cy="160.7" r="4.5"/>
+
+        <text class="cw-t" x="134" y="46" style="fill:var(--danger);font-weight:600">3 dup ACKs → cwnd ÷ 2</text>
+        <text class="cw-t" x="438" y="103" style="fill:var(--danger);font-weight:600">3 dup ACKs → cwnd ÷ 2</text>
+        <text class="cw-t" x="616" y="152" text-anchor="end" style="fill:var(--danger);font-weight:600">timeout → cwnd = 1</text>
+        <text class="cw-t" x="76" y="262" style="fill:var(--server);font-weight:600">slow start: ×2 per RTT</text>
+        <text class="cw-t" x="658" y="252" style="fill:var(--server);font-weight:600">slow start again</text>
+        <text class="cw-t" x="216" y="94" style="fill:var(--client);font-weight:600">congestion avoidance: +1 segment per RTT</text>
+
+        <text class="cw-t" x="790" y="340" text-anchor="end">Reno-style AIMD · initial window 10 segments (RFC 6928)</text>
+      </svg>
+    </div>
+    <figcaption>The shape every TCP connection traces. <strong>Additive increase, multiplicative decrease</strong> — probe upward gently, back off hard on the first sign of trouble. AIMD is what makes many independent TCP flows converge on a fair share of a shared link without any of them ever talking to each other.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>The four phases, in words</h3>
+    <ol>
+      <li><strong>Slow start</strong> — badly named; it is the <em>fastest</em> phase. cwnd starts at 10 segments (RFC 6928; it was 1 in the original design) and <strong>doubles every round trip</strong> — exponential growth, probing for the pipe&rsquo;s capacity as quickly as it dares.</li>
+      <li><strong>Congestion avoidance</strong> — once cwnd passes <span class="m">ssthresh</span>, growth switches to <strong>+1 segment per round trip</strong>. Linear, cautious: we are near capacity, so creep up.</li>
+      <li><strong>Fast retransmit &amp; fast recovery</strong> — on three duplicate ACKs, resend the missing segment, set <span class="m">ssthresh = cwnd / 2</span>, set <span class="m">cwnd = ssthresh</span>, and continue in congestion avoidance. The connection survives the loss without stalling.</li>
+      <li><strong>Timeout</strong> — the expensive one. <span class="m">ssthresh = cwnd / 2</span>, <strong>cwnd = 1</strong>, back to slow start. A single RTO can cost more throughput than dozens of fast retransmits.</li>
+    </ol>
+  </div>
+
+  <div class="col" style="margin-top:24px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Algorithm</th><th>Reacts to</th><th>Growth</th><th>Where you&rsquo;ll meet it</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Tahoe</strong> (1988)</td><td>loss</td><td>every loss → cwnd = 1</td><td>historical; no fast recovery</td></tr>
+          <tr><td><strong>Reno / NewReno</strong></td><td>loss</td><td>AIMD, linear</td><td>the textbook model; still the reference</td></tr>
+          <tr><td><strong>CUBIC</strong></td><td>loss</td><td>cubic function of time since last loss</td><td><strong>Linux default</strong> since 2006, and Windows 10+. Recovers to the previous peak fast, then probes gently — much better on high-BDP links than Reno&rsquo;s linear crawl.</td></tr>
+          <tr><td><strong>BBR</strong> (Google, 2016)</td><td><em>bandwidth &amp; RTT</em>, not loss</td><td>models the bottleneck directly</td><td>YouTube, Google Cloud, opt-in on Linux. Ignores loss as a congestion signal, which makes it strong on lossy wireless links and on paths with bloated buffers.</td></tr>
+          <tr><td><strong>Vegas</strong></td><td>rising RTT</td><td>delay-based</td><td>rarely deployed alone — loses badly when competing against loss-based flows</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <div class="note">
+      <span class="tag">Why loss-based control has a problem</span>
+      <p>Reno and CUBIC treat a dropped packet as the signal to back off. That works when router buffers are small. Modern routers ship with enormous buffers, so under load they don&rsquo;t drop — they <em>queue</em>, adding hundreds of milliseconds of delay before any loss occurs. Loss-based TCP happily fills those buffers, and everything sharing the link becomes laggy. This is <strong>bufferbloat</strong>. It is why BBR measures delivery rate and minimum RTT instead of waiting for drops, and why <strong>ECN</strong> exists: routers mark packets with a congestion bit instead of discarding them, and the receiver echoes it back with the <span class="m">ECE</span> flag — congestion signalled at zero cost.</p>
+    </div>
+    <p style="margin-top:14px">Check and change what your machine uses:</p>
+    <pre>$ sysctl net.ipv4.tcp_congestion_control
+net.ipv4.tcp_congestion_control = <b>cubic</b>
+
+$ sysctl net.ipv4.tcp_available_congestion_control
+net.ipv4.tcp_available_congestion_control = <b>reno cubic bbr</b>
+
+$ sudo sysctl -w net.ipv4.tcp_congestion_control=bbr   <span class="cm"># per-host default</span></pre>
+  </div>
+</section>
+
+<!-- ══════════════════ CLOSE ══════════════════ -->
+<section id="close">
+  <div class="col sec-head">
+    <span class="eyebrow">Shutting down</span>
+    <h2>Four steps, sometimes three, and one state that lingers</h2>
+    <p class="sec-sub">Your four-step teardown was right. What&rsquo;s missing is <em>why</em> it needs four when opening needs three, and what happens in the sixty seconds afterwards.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The asymmetry has a simple cause: <strong>a TCP connection is two independent one-way streams</strong>, and each is shut down separately. FIN does not mean &ldquo;goodbye&rdquo; — it means <em>&ldquo;I have no more data to send. You may keep sending.&rdquo;</em> That state is called a <strong>half-close</strong>, and it is a real, usable condition, not an error.</p>
+    <p>So each direction needs its own FIN and its own ACK: four segments. The handshake gets away with three only because the middle segment does double duty.</p>
+    <div class="note">
+      <span class="tag">Very often it&rsquo;s three, not four</span>
+      <p>If the closing side&rsquo;s application also has nothing more to send — the common case — the receiving kernel can coalesce the ACK for the incoming FIN with its own outgoing FIN into a single <span class="m">FIN, ACK</span> segment. In real traces a three-segment close is at least as common as a four-segment one. Both are correct.</p>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:22px">
+    <figure>
+      <div class="fig-box">
+        <svg class="diagram" viewBox="0 0 330 250" role="img" aria-label="Four-segment close: client sends FIN, server acknowledges it, later the server sends its own FIN, and the client acknowledges that.">
+          <text class="lad-host" x="46" y="14" text-anchor="middle">CLIENT</text>
+          <text class="lad-host" x="284" y="14" text-anchor="middle">SERVER</text>
+          <line class="lad-line" x1="46" y1="24" x2="46" y2="242"/>
+          <line class="lad-line" x1="284" y1="24" x2="284" y2="242"/>
+          <g class="pk c2s"><line class="wire" x1="50" y1="44" x2="276" y2="72"/><polygon class="head" points="280,73 267,67 268,77"/><text class="lbl" x="163" y="52" text-anchor="middle">1 · FIN, ACK</text></g>
+          <g class="pk s2c"><line class="wire" x1="280" y1="98" x2="54" y2="126"/><polygon class="head" points="50,127 63,121 62,131"/><text class="lbl" x="167" y="106" text-anchor="middle">2 · ACK</text></g>
+          <g class="pk s2c"><line class="wire" x1="280" y1="152" x2="54" y2="180"/><polygon class="head" points="50,181 63,175 62,185"/><text class="lbl" x="167" y="160" text-anchor="middle">3 · FIN, ACK</text></g>
+          <g class="pk c2s"><line class="wire" x1="50" y1="206" x2="276" y2="234"/><polygon class="head" points="280,235 267,229 268,239"/><text class="lbl" x="163" y="214" text-anchor="middle">4 · ACK</text></g>
+          <text class="lad-ann" x="52" y="90">FIN_WAIT_1</text>
+          <text class="lad-ann" x="52" y="144">FIN_WAIT_2</text>
+          <text class="lad-ann" x="52" y="200">TIME_WAIT</text>
+          <text class="lad-ann" x="278" y="90" text-anchor="end">CLOSE_WAIT</text>
+          <text class="lad-ann" x="278" y="200" text-anchor="end">LAST_ACK</text>
+        </svg>
+      </div>
+      <figcaption>The full four-segment close. Between steps 2 and 3 the connection is <strong>half-open</strong>: the server may still send data, and the client must still read it.</figcaption>
+    </figure>
+    <figure>
+      <div class="fig-box">
+        <svg class="diagram" viewBox="0 0 330 250" role="img" aria-label="Abortive close: one side sends a single RST segment and the connection is gone immediately, with no acknowledgment and any queued data discarded.">
+          <text class="lad-host" x="46" y="14" text-anchor="middle">CLIENT</text>
+          <text class="lad-host" x="284" y="14" text-anchor="middle">SERVER</text>
+          <line class="lad-line" x1="46" y1="24" x2="46" y2="242"/>
+          <line class="lad-line" x1="284" y1="24" x2="284" y2="242"/>
+          <g class="pk c2s"><line class="wire" x1="50" y1="60" x2="276" y2="88"/><polygon class="head" points="280,89 267,83 268,93"/><text class="lbl" x="163" y="68" text-anchor="middle">data …</text></g>
+          <g class="pk s2c lost"><line class="wire" x1="280" y1="118" x2="54" y2="146"/><polygon class="head" points="50,147 63,141 62,151"/><text class="lbl" x="167" y="126" text-anchor="middle">RST</text></g>
+          <line class="lad-x" x1="38" y1="170" x2="54" y2="186"/><line class="lad-x" x1="54" y1="170" x2="38" y2="186"/>
+          <line class="lad-x" x1="276" y1="170" x2="292" y2="186"/><line class="lad-x" x1="292" y1="170" x2="276" y2="186"/>
+          <text class="lad-ann" x="163" y="212" text-anchor="middle" style="fill:var(--danger)">Both sides CLOSED instantly.</text>
+          <text class="lad-ann" x="163" y="228" text-anchor="middle" style="fill:var(--danger)">Queued data is discarded. No TIME_WAIT.</text>
+        </svg>
+      </div>
+      <figcaption>The abortive alternative. A <strong>RST</strong> is not acknowledged and not negotiated. It is what you get from <span class="m">ECONNRESET</span>, from connecting to a closed port, and from <span class="m">SO_LINGER</span> with a zero timeout.</figcaption>
+    </figure>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>TIME_WAIT: the state everyone tries to delete</h3>
+    <p>After sending the final ACK, the side that closed first does <strong>not</strong> go straight to CLOSED. It sits in <strong>TIME_WAIT</strong> for <span class="m">2 × MSL</span> — twice the Maximum Segment Lifetime, the longest a segment is assumed to survive in the network. The RFC value of MSL is 2 minutes, so 4 minutes; Linux hardcodes 60 seconds.</p>
+    <p>It exists for two distinct reasons, and both are real:</p>
+    <ol>
+      <li><strong>The final ACK might be lost.</strong> If it is, the peer&rsquo;s LAST_ACK timer fires and it retransmits its FIN. Someone has to still be there to answer. A socket that vanished immediately would answer with a RST, and the peer would report a connection error on a perfectly clean shutdown.</li>
+      <li><strong>Old segments must expire.</strong> The four-tuple may be reused by a brand-new connection at any moment. If a delayed duplicate from the <em>old</em> connection were still wandering the network, it could arrive with a sequence number that happens to fall inside the new connection&rsquo;s window and silently corrupt its stream. Waiting 2×MSL guarantees every straggler is gone.</li>
+    </ol>
+    <div class="note">
+      <span class="tag">Practical fallout</span>
+      <p>A machine making many short outbound connections accumulates thousands of TIME_WAIT entries, each holding an ephemeral port. Two options are usually offered; only one is safe.</p>
+      <p><strong><span class="m">net.ipv4.tcp_tw_reuse = 1</span> — reasonable.</strong> Lets a <em>new outbound</em> connection reuse a TIME_WAIT four-tuple when timestamps prove the old one is stale. Client-side only.</p>
+      <p><strong><span class="m">net.ipv4.tcp_tw_recycle</span> — do not use.</strong> It broke connections from clients behind NAT and was <em>removed from Linux entirely</em> in kernel 4.12. Plenty of stale blog posts still recommend it.</p>
+      <p>The real fix is upstream: <strong>keep connections alive and pool them</strong>, so you aren&rsquo;t opening and closing thousands of them in the first place. And have the <em>client</em> close first where possible, so TIME_WAIT accumulates on the machine with spare ports rather than on the server.</p>
+    </div>
+
+    <h3 style="margin-top:26px">CLOSE_WAIT is always your bug</h3>
+    <p>Worth knowing on sight, because it is unambiguous. A socket enters <strong>CLOSE_WAIT</strong> when the peer&rsquo;s FIN arrives and the kernel ACKs it. Leaving that state requires <em>your application</em> to call <code>close()</code>. Nothing else will move it. There is no timeout.</p>
+    <p>So a pile of sockets stuck in CLOSE_WAIT means exactly one thing: <strong>your code is leaking file descriptors</strong> — reading until EOF and never closing, an exception path that skips cleanup, a connection pool that doesn&rsquo;t reap. Unlike TIME_WAIT, it is never a tuning problem and never resolves on its own.</p>
+    <pre>$ ss -tan state close-wait
+State      Recv-Q  Send-Q   Local Address:Port    Peer Address:Port
+CLOSE-WAIT      1       0   10.0.0.4:8080         10.0.0.9:41022
+CLOSE-WAIT      1       0   10.0.0.4:8080         10.0.0.9:41024      <span class="cm">← and 4,000 more: find the missing close()</span></pre>
+
+    <h3 style="margin-top:26px">Keepalive: detecting a peer that simply disappeared</h3>
+    <p>An idle TCP connection sends nothing. If the peer is powered off or its cable is pulled, no FIN and no RST is ever sent — your socket stays happily ESTABLISHED forever, pointing at a machine that no longer exists. This is a <strong>half-open connection</strong> (different from half-<em>closed</em>).</p>
+    <p><span class="m">SO_KEEPALIVE</span> sends a probe — a segment with a sequence number one <em>behind</em> the current one, which forces an ACK — after an idle period. Linux defaults are conservative to the point of uselessness for most services:</p>
+    <pre>tcp_keepalive_time   = 7200   <span class="cm"># 2 hours idle before the first probe</span>
+tcp_keepalive_intvl  = 75     <span class="cm"># then every 75 s</span>
+tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to notice</span></pre>
+    <p>Most application protocols implement their own heartbeat instead (HTTP/2 PING frames, WebSocket ping, gRPC keepalive), because they need detection in seconds and they need it to traverse proxies that would otherwise silently drop an idle connection.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ STATES ══════════════════ -->
+<style>
+.sm-node.act.acts rect{fill:var(--surface-3);stroke:var(--ink);stroke-width:2.6}
+.sm-node.act.acts text{fill:var(--ink)}
+.sm-wrap{overflow-x:auto}
+.sm-wrap svg{min-width:640px}
+</style>
+<section id="states">
+  <div class="col sec-head">
+    <span class="eyebrow">The state machine</span>
+    <h2>Eleven states, and the paths between them</h2>
+    <p class="sec-sub">Everything above is really one diagram. Press <strong>Play</strong> in the Lab and both markers move through it — the ochre one is the client, the teal one is the server.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <h4>RFC 9293 · connection states</h4>
+      <span class="chip c" id="smC">client · CLOSED</span>
+      <span class="chip s" id="smS">server · LISTEN</span>
+      <span style="flex:1"></span>
+      <span class="ctrl">follows the Lab</span>
+    </div>
+    <div class="panel-body sm-wrap">
+      <svg class="diagram" viewBox="0 0 840 712" role="img" aria-label="The TCP connection state machine: CLOSED leads to LISTEN on a passive open or SYN_SENT on an active open; both converge on ESTABLISHED; from there an active close runs through FIN_WAIT_1, FIN_WAIT_2 and TIME_WAIT back to CLOSED, while a passive close runs through CLOSE_WAIT and LAST_ACK.">
+        <defs>
+          <marker id="amk" markerWidth="9" markerHeight="7" refX="8.4" refY="3.5" orient="auto"><polygon points="0,0 9,3.5 0,7" fill="var(--client)"/></marker>
+          <marker id="smk" markerWidth="9" markerHeight="7" refX="8.4" refY="3.5" orient="auto"><polygon points="0,0 9,3.5 0,7" fill="var(--server)"/></marker>
+          <marker id="nmk" markerWidth="9" markerHeight="7" refX="8.4" refY="3.5" orient="auto"><polygon points="0,0 9,3.5 0,7" fill="var(--ink-3)"/></marker>
+        </defs>
+
+        <!-- edges first, so nodes paint on top -->
+        <line class="sm-e pas" x1="368" y1="48" x2="196" y2="114" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="276" y="72" text-anchor="middle">passive open · listen()</text>
+
+        <line class="sm-e act" x1="472" y1="48" x2="644" y2="114" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="564" y="72" text-anchor="middle">active open · connect()</text>
+        <text class="sm-l act" x="564" y="84" text-anchor="middle">send SYN</text>
+
+        <line class="sm-e pas" x1="140" y1="147" x2="140" y2="213" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="150" y="176">recv SYN</text>
+        <text class="sm-l pas" x="150" y="188">send SYN, ACK</text>
+
+        <line class="sm-e pas" x1="196" y1="246" x2="366" y2="316" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="272" y="272">recv ACK</text>
+
+        <line class="sm-e act" x1="644" y1="147" x2="474" y2="316" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="588" y="222" text-anchor="end">recv SYN, ACK</text>
+        <text class="sm-l act" x="588" y="234" text-anchor="end">send ACK</text>
+
+        <line class="sm-e pas" x1="366" y1="352" x2="196" y2="420" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="272" y="374">recv FIN</text>
+        <text class="sm-l pas" x="272" y="386">send ACK</text>
+
+        <line class="sm-e act" x1="474" y1="352" x2="644" y2="420" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="566" y="374">close()</text>
+        <text class="sm-l act" x="566" y="386">send FIN</text>
+
+        <line class="sm-e pas" x1="140" y1="453" x2="140" y2="519" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="150" y="482">close()</text>
+        <text class="sm-l pas" x="150" y="494">send FIN</text>
+
+        <line class="sm-e pas" x1="178" y1="555" x2="252" y2="622" marker-end="url(#smk)"/>
+        <text class="sm-l pas" x="196" y="600">recv ACK</text>
+
+        <line class="sm-e act" x1="700" y1="453" x2="700" y2="519" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="710" y="490">recv ACK</text>
+
+        <line class="sm-e act" x1="644" y1="452" x2="478" y2="522" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="562" y="474" text-anchor="middle">recv FIN · send ACK</text>
+        <text class="sm-l act" x="562" y="486" text-anchor="middle">simultaneous close</text>
+
+        <path class="sm-e act" d="M 759 442 Q 802 442 802 474 L 802 610 Q 802 640 772 640 L 623 640" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="700" y="626" text-anchor="middle">recv FIN, ACK</text>
+        <text class="sm-l act" x="700" y="638" text-anchor="middle">send ACK</text>
+
+        <line class="sm-e act" x1="658" y1="555" x2="598" y2="622" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="614" y="586" text-anchor="end">recv FIN</text>
+        <text class="sm-l act" x="614" y="598" text-anchor="end">send ACK</text>
+
+        <line class="sm-e act" x1="462" y1="555" x2="524" y2="622" marker-end="url(#amk)"/>
+        <text class="sm-l act" x="470" y="598">recv ACK</text>
+
+        <line class="sm-e tmo" x1="499" y1="640" x2="361" y2="640" marker-end="url(#nmk)"/>
+        <text class="sm-l" x="430" y="632" text-anchor="middle">2 × MSL timeout</text>
+
+        <!-- nodes -->
+        <g class="sm-node" data-state="CLOSED"><rect x="361" y="17" width="118" height="34" rx="4"/><text x="420" y="38">CLOSED</text></g>
+        <g class="sm-node" data-state="LISTEN"><rect x="81" y="113" width="118" height="34" rx="4"/><text x="140" y="134">LISTEN</text></g>
+        <g class="sm-node" data-state="SYN-SENT"><rect x="641" y="113" width="118" height="34" rx="4"/><text x="700" y="134">SYN-SENT</text></g>
+        <g class="sm-node" data-state="SYN-RECEIVED"><rect x="81" y="215" width="118" height="34" rx="4"/><text x="140" y="236">SYN-RECEIVED</text></g>
+        <g class="sm-node" data-state="ESTABLISHED"><rect x="361" y="317" width="118" height="34" rx="4"/><text x="420" y="338">ESTABLISHED</text></g>
+        <g class="sm-node" data-state="CLOSE-WAIT"><rect x="81" y="419" width="118" height="34" rx="4"/><text x="140" y="440">CLOSE-WAIT</text></g>
+        <g class="sm-node" data-state="FIN-WAIT-1"><rect x="641" y="419" width="118" height="34" rx="4"/><text x="700" y="440">FIN-WAIT-1</text></g>
+        <g class="sm-node" data-state="LAST-ACK"><rect x="81" y="521" width="118" height="34" rx="4"/><text x="140" y="542">LAST-ACK</text></g>
+        <g class="sm-node" data-state="CLOSING"><rect x="361" y="521" width="118" height="34" rx="4"/><text x="420" y="542">CLOSING</text></g>
+        <g class="sm-node" data-state="FIN-WAIT-2"><rect x="641" y="521" width="118" height="34" rx="4"/><text x="700" y="542">FIN-WAIT-2</text></g>
+        <g class="sm-node" data-state="TIME-WAIT"><rect x="501" y="623" width="118" height="34" rx="4"/><text x="560" y="644">TIME-WAIT</text></g>
+        <g class="sm-node" data-state="CLOSED"><rect x="241" y="623" width="118" height="34" rx="4"/><text x="300" y="644">CLOSED</text></g>
+
+        <!-- legend -->
+        <line class="sm-e act" x1="24" y1="684" x2="60" y2="684"/>
+        <text class="sm-l" x="66" y="688">active side — the end that opens or closes first</text>
+        <line class="sm-e pas" x1="360" y1="684" x2="396" y2="684"/>
+        <text class="sm-l" x="402" y="688">passive side — the end that responds</text>
+        <line class="sm-e tmo" x1="656" y1="684" x2="692" y2="684"/>
+        <text class="sm-l" x="698" y="688">timer, no packet</text>
+      </svg>
+    </div>
+    <div class="panel-foot">Not drawn: <strong>simultaneous open</strong>, where both ends send a SYN at once and both go SYN-SENT → SYN-RECEIVED → ESTABLISHED. Legal, specified, and almost never seen outside NAT-traversal tricks.</div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <p>The two vertical columns are the two ways a connection ends. Down the <strong style="color:var(--client)">right</strong>: the side that calls <code>close()</code> first — FIN-WAIT-1 → FIN-WAIT-2 → TIME-WAIT. Down the <strong style="color:var(--server)">left</strong>: the side that merely responds — CLOSE-WAIT → LAST-ACK → CLOSED, and no TIME-WAIT at all. Which column your server lands in determines whether it accumulates TIME-WAIT sockets, which is why &ldquo;who closes first&rdquo; is an architectural decision, not a detail.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ CHECKSUM ══════════════════ -->
+<section id="checksum">
+  <div class="col sec-head">
+    <span class="eyebrow">Integrity</span>
+    <h2>The checksum, and the addresses hidden inside it</h2>
+    <p class="sec-sub">You had this right — &ldquo;a mechanism so the destination can understand if the source sent wrong data, ones&rsquo; complement.&rdquo; Two details make it more interesting than it looks.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The algorithm itself is deliberately cheap, because in 1981 it ran on hardware that could not afford a real hash:</p>
+    <ol>
+      <li>Set the checksum field to zero.</li>
+      <li>Treat everything to be covered as a sequence of 16-bit big-endian words. Pad the data with a zero byte if its length is odd (the pad is not transmitted).</li>
+      <li>Add them all with <strong>end-around carry</strong> — whenever the sum exceeds 16 bits, add the overflow back into the low bits. This is ones&rsquo;-complement addition.</li>
+      <li>Take the ones&rsquo; complement (bitwise NOT) of the result. That is the checksum.</li>
+    </ol>
+    <p>The receiver sums the same words <em>including</em> the checksum field. A correct segment always sums to <span class="m">0xFFFF</span>, whose complement is <span class="m">0x0000</span> — so the receiver just checks for zero.</p>
+  </div>
+
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-bar"><h4>Worked example</h4><span class="chip">three 16-bit words</span></div>
+    <div class="panel-body">
+<pre>  0xE34F
++ 0x2396
+─────────
+  0x106E5      <span class="cm">carry out of 16 bits …</span>
+  0x06E5 + 1 = <b>0x06E6</b>   <span class="cm">… added back in (end-around carry)</span>
+
+  0x06E6
++ 0x4427
+─────────
+  <b>0x4B0D</b>       <span class="cm">final ones'-complement sum</span>
+
+  checksum = ~0x4B0D = <b>0xB4F2</b>       <span class="cm">what goes in the header</span>
+
+<span class="sv">receiver:</span>  0x4B0D + 0xB4F2 = <b>0xFFFF</b>  →  ~0xFFFF = <b>0x0000</b>  ✓ valid</pre>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>What it covers — including twelve bytes that are never sent</h3>
+    <p>Here is the part most notes leave out. The checksum is not computed over the TCP segment alone. It also covers a <strong>pseudo-header</strong>, assembled from IP-layer fields, which exists only in memory during the calculation:</p>
+  </div>
+
+  <figure style="margin-top:14px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 800 214" role="img" aria-label="The TCP checksum covers a twelve-byte pseudo-header built from the source and destination IP addresses, a zero byte, the protocol number 6, and the TCP length, followed by the real TCP header and the payload. Only the last two are transmitted.">
+        <rect x="14" y="30" width="330" height="98" rx="4" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="179" y="22" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;fill:var(--danger)">PSEUDO-HEADER · 12 B · NEVER TRANSMITTED</text>
+        <rect x="26" y="44" width="306" height="22" rx="3" fill="var(--surface)" stroke="var(--danger-line)"/>
+        <text x="179" y="59" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">Source IP address — 4 B</text>
+        <rect x="26" y="70" width="306" height="22" rx="3" fill="var(--surface)" stroke="var(--danger-line)"/>
+        <text x="179" y="85" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">Destination IP address — 4 B</text>
+        <rect x="26" y="96" width="82" height="22" rx="3" fill="var(--surface)" stroke="var(--danger-line)"/>
+        <text x="67" y="111" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)">zero · 1 B</text>
+        <rect x="112" y="96" width="104" height="22" rx="3" fill="var(--surface)" stroke="var(--danger-line)"/>
+        <text x="164" y="111" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)">protocol = 6</text>
+        <rect x="220" y="96" width="112" height="22" rx="3" fill="var(--surface)" stroke="var(--danger-line)"/>
+        <text x="276" y="111" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;fill:var(--ink-2)">TCP length · 2 B</text>
+
+        <rect x="360" y="30" width="200" height="98" rx="4" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.5"/>
+        <text x="460" y="22" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;fill:var(--client)">TCP HEADER · 20–60 B</text>
+        <text x="460" y="76" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--client)">checksum field = 0</text>
+        <text x="460" y="92" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--client)">during the calculation</text>
+
+        <rect x="576" y="30" width="210" height="98" rx="4" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.5"/>
+        <text x="681" y="22" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;fill:var(--server)">PAYLOAD</text>
+        <text x="681" y="84" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--server)">zero-padded to an even length</text>
+
+        <path d="M14 142 L14 150 L786 150 L786 142" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".45"/>
+        <text x="400" y="166" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)">all of this is summed →  one 16-bit checksum</text>
+        <path d="M360 186 L360 178 L786 178 L786 186" fill="none" stroke="var(--ok)" stroke-width="1.4"/>
+        <text x="573" y="200" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--ok)">only this half actually goes on the wire</text>
+      </svg>
+    </div>
+    <figcaption>The pseudo-header binds the checksum to the IP addresses. A segment delivered to the wrong host fails validation even if every byte of TCP is intact — the transport layer verifies the network layer&rsquo;s work.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <div class="note">
+      <span class="tag">Three consequences</span>
+      <p><strong>NAT must rewrite it.</strong> A router that changes your source IP or port has invalidated the checksum, so it has to recompute — this is why NAT is a transport-layer operation, not a pure network-layer one, and why protocols that embed addresses in their payload (classic FTP, SIP) need special NAT helpers.</p>
+      <p><strong>It is weak, and it is not your only protection.</strong> Sixteen bits catch roughly 1 error in 65,536, and the sum misses whole classes of reordering. It is a last-resort check on top of Ethernet&rsquo;s 32-bit CRC. For data you truly care about, checksum at the application layer.</p>
+      <p><strong>Your NIC probably computes it.</strong> Checksum offload means the kernel hands the card a segment with a placeholder. Which is why <span class="m">tcpdump</span> on the sending host frequently shows <span class="m">cksum incorrect</span> for outbound packets — you are seeing them before the hardware fills the field in. Nothing is broken.</p>
+      <p style="margin-top:2px">One last contrast: <strong>in TCP the checksum is mandatory</strong>. In UDP over IPv4 it was optional (a zero field means &ldquo;not computed&rdquo;); over IPv6 it became mandatory there too, because IPv6 dropped its own header checksum.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ HTTP ══════════════════ -->
+<section id="http">
+  <div class="col sec-head">
+    <span class="eyebrow">TCP under HTTP</span>
+    <h2>Does every API call cost a handshake?</h2>
+    <p class="sec-sub">Your answer to this was essentially correct. Here it is with the numbers attached, plus four refinements worth having.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p><strong>No — not since 1997.</strong> A TCP handshake costs one full round trip <em>before any application byte moves</em>, and over HTTPS a TLS 1.3 handshake costs another. On a 60&nbsp;ms path that is 120&nbsp;ms of pure setup. Connection reuse is the single largest latency win available to an HTTP client, which is why every layer of the stack now does it by default.</p>
+  </div>
+
+  <figure style="margin-top:20px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 820 326" role="img" aria-label="Four sequential API requests take eight round trips over HTTP/1.0 because each opens its own connection, five round trips over HTTP/1.1 with keep-alive because one connection is reused, and two round trips over HTTP/2 because the four requests are multiplexed concurrently on one connection.">
+        <text class="lad-phase" x="14" y="42">HTTP/1.0</text>
+        <text class="lad-addr" x="14" y="56" style="font-size:10px">new connection each time</text>
+        <rect x="130" y="30" width="78" height="24" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <rect x="208" y="30" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <rect x="286" y="30" width="78" height="24" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <rect x="364" y="30" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <rect x="442" y="30" width="78" height="24" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <rect x="520" y="30" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <rect x="598" y="30" width="78" height="24" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <rect x="676" y="30" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <text x="169" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <text x="247" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 1</text>
+        <text x="325" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <text x="403" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 2</text>
+        <text x="481" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <text x="559" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 3</text>
+        <text x="637" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <text x="715" y="46" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 4</text>
+        <text x="766" y="46" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--danger)">8</text>
+
+        <text class="lad-phase" x="14" y="122">HTTP/1.1</text>
+        <text class="lad-addr" x="14" y="136" style="font-size:10px">keep-alive, sequential</text>
+        <rect x="130" y="110" width="78" height="24" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <text x="169" y="126" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <rect x="208" y="110" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <text x="247" y="126" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 1</text>
+        <rect x="286" y="110" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <text x="325" y="126" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 2</text>
+        <rect x="364" y="110" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <text x="403" y="126" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 3</text>
+        <rect x="442" y="110" width="78" height="24" rx="3" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1.3"/>
+        <text x="481" y="126" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--server)">req 4</text>
+        <text x="532" y="126" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--client)">5</text>
+
+        <text class="lad-phase" x="14" y="202">HTTP/2</text>
+        <text class="lad-addr" x="14" y="216" style="font-size:10px">multiplexed, concurrent</text>
+        <rect x="130" y="190" width="78" height="40" rx="3" fill="var(--client-soft)" stroke="var(--client)" stroke-width="1.3"/>
+        <text x="169" y="214" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:var(--client)">handshake</text>
+        <rect x="208" y="190" width="78" height="7" rx="2" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1"/>
+        <rect x="208" y="201" width="78" height="7" rx="2" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1"/>
+        <rect x="208" y="212" width="78" height="7" rx="2" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1"/>
+        <rect x="208" y="223" width="78" height="7" rx="2" fill="var(--server-soft)" stroke="var(--server)" stroke-width="1"/>
+        <text x="296" y="214" style="font-family:var(--mono);font-size:9px;fill:var(--server)">4 streams, one connection</text>
+        <text x="446" y="214" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ok)">2</text>
+
+        <line class="cw-ax" x1="130" y1="262" x2="754" y2="262"/>
+        <line class="cw-grid" x1="130" y1="256" x2="130" y2="268"/>
+        <line class="cw-grid" x1="286" y1="256" x2="286" y2="268"/>
+        <line class="cw-grid" x1="442" y1="256" x2="442" y2="268"/>
+        <line class="cw-grid" x1="598" y1="256" x2="598" y2="268"/>
+        <line class="cw-grid" x1="754" y1="256" x2="754" y2="268"/>
+        <text class="cw-t" x="130" y="282" text-anchor="middle">0</text>
+        <text class="cw-t" x="286" y="282" text-anchor="middle">2</text>
+        <text class="cw-t" x="442" y="282" text-anchor="middle">4</text>
+        <text class="cw-t" x="598" y="282" text-anchor="middle">6</text>
+        <text class="cw-t" x="754" y="282" text-anchor="middle">8</text>
+        <text class="cw-t b" x="442" y="302" text-anchor="middle">round trips</text>
+        <text class="cw-t" x="766" y="318" text-anchor="end">TLS omitted — it adds one more round trip per new connection</text>
+      </svg>
+    </div>
+    <figcaption>Four small API calls, drawn to the same time scale. The bars are round trips, not bytes: for small requests, latency is almost entirely setup and waiting, which is why reuse dominates.</figcaption>
+  </figure>
+
+  <div class="col" style="margin-top:24px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Version</th><th>Transport</th><th>Connections</th><th>New handshake per request?</th></tr></thead>
+        <tbody>
+          <tr><td><strong>HTTP/1.0</strong> (1996)</td><td>TCP</td><td>one per request</td><td><strong style="color:var(--danger)">Yes</strong> — though <span class="m">Connection: keep-alive</span> existed as a widely-implemented non-standard extension.</td></tr>
+          <tr><td><strong>HTTP/1.1</strong> (1997)</td><td>TCP</td><td>persistent by default; browsers open ~6 per origin</td><td><strong style="color:var(--ok)">No</strong> — reused until idle timeout or <span class="m">Connection: close</span>. One request at a time per connection.</td></tr>
+          <tr><td><strong>HTTP/2</strong> (2015)</td><td>TCP + TLS</td><td>one per origin</td><td><strong style="color:var(--ok)">No</strong> — many concurrent streams multiplexed over the single connection.</td></tr>
+          <tr><td><strong>HTTP/3</strong> (2022)</td><td><strong>QUIC over UDP</strong></td><td>one per origin</td><td><strong style="color:var(--ok)">No TCP at all.</strong> Transport and crypto handshake combine into 1 RTT, or 0 RTT on resumption.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>Four refinements to your list</h3>
+    <div class="fix">
+      <span class="tag">1 · HTTP/2 does not remove head-of-line blocking</span>
+      <p>It removes it at the <em>HTTP</em> layer — one slow response no longer blocks the others. But all those streams still ride one TCP connection, and <strong>TCP delivers bytes strictly in order</strong>. Lose one segment and the kernel holds back <em>every</em> stream&rsquo;s data until the retransmission arrives, even streams whose bytes already made it. On a lossy link, HTTP/2 over TCP can be <em>slower</em> than HTTP/1.1 with six connections. Removing this is the entire reason HTTP/3 abandoned TCP: QUIC tracks loss per stream, so one lost packet stalls only its own stream.</p>
+    </div>
+    <div class="fix">
+      <span class="tag">2 · &ldquo;Cross-origin&rdquo; isn&rsquo;t quite the trigger</span>
+      <p>Connection pools are keyed by <strong>(scheme, host, port)</strong> — and in modern browsers also by the top-level site, for privacy (network-state partitioning). Two different hostnames that resolve to the <em>same IP</em> still get separate pools. The exception is HTTP/2 <strong>connection coalescing</strong>: if two hostnames resolve to the same IP and the TLS certificate covers both, a browser may reuse one connection for both.</p>
+    </div>
+    <div class="fix">
+      <span class="tag">3 · Server-side limits also close connections</span>
+      <p>Your &ldquo;connection pooling limits&rdquo; point is right but usually server-driven. Nginx <span class="m">keepalive_requests</span> (default 1000) and <span class="m">keepalive_timeout</span> (75 s) will close the connection from the server side. AWS ALB idles out at 60 s by default — a classic source of intermittent 502s when the client&rsquo;s idle timeout is <em>longer</em> than the load balancer&rsquo;s and it reuses a connection the balancer has already closed. <strong>Always set your client&rsquo;s idle timeout shorter than the server&rsquo;s.</strong></p>
+    </div>
+    <div class="fix">
+      <span class="tag">4 · The &ldquo;fresh client per request&rdquo; bug, by language</span>
+      <p>Your last point is the one that costs the most in real code, so here is what &ldquo;share a persistent client&rdquo; concretely means:</p>
+      <pre>Go       <b>one</b> http.Client / http.Transport, package-level  <span class="cm">— never per request</span>
+Python   requests.Session()  or  httpx.Client()             <span class="cm">— not requests.get()</span>
+Node     an Agent with keepAlive:true, or undici's Pool     <span class="cm">— fetch() defaults to keep-alive</span>
+Java     one OkHttpClient (it pools by default)             <span class="cm">— or HttpClient, reused</span>
+.NET     IHttpClientFactory                                 <span class="cm">— never `new HttpClient()` in a loop</span></pre>
+      <p>The failure mode is distinctive: it works perfectly in development and exhausts ephemeral ports under production load, with <span class="m">EADDRNOTAVAIL</span> and a huge TIME_WAIT count.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SEE IT ══════════════════ -->
+<section id="seeit">
+  <div class="col sec-head">
+    <span class="eyebrow">Hands on</span>
+    <h2>Watch a real connection in the next sixty seconds</h2>
+    <p class="sec-sub">Everything on this page is visible on your own machine right now. Two terminals is all it takes.</p>
+  </div>
+
+  <div class="col sec-body">
+    <h3>Capture a handshake</h3>
+    <pre><span class="cm"># terminal 1 — watch port 80 traffic to one host, with absolute sequence numbers</span>
+$ sudo tcpdump -i any -n -S 'host example.com and tcp port 80'
+
+<span class="cm"># terminal 2 — make one request</span>
+$ curl -s -o /dev/null http://example.com/</pre>
+    <p>You will see something very close to the Lab trace:</p>
+    <pre>IP 192.168.1.20.51420 &gt; 93.184.216.34.80: Flags [<b>S</b>],  seq 2847113019, win 64240,
+     options [mss 1460,sackOK,TS val 88 ecr 0,nop,<b>wscale 7</b>], length 0
+IP 93.184.216.34.80 &gt; 192.168.1.20.51420: Flags [<b>S.</b>], seq 1904772281, ack 2847113020,
+     win 65535, options [mss 1440,sackOK,TS val 41 ecr 88,nop,wscale 9], length 0
+IP 192.168.1.20.51420 &gt; 93.184.216.34.80: Flags [<b>.</b>],  ack 1, win 502, length 0
+IP 192.168.1.20.51420 &gt; 93.184.216.34.80: Flags [<b>P.</b>], seq 1:78, ack 1, length <b>77</b>
+IP 93.184.216.34.80 &gt; 192.168.1.20.51420: Flags [<b>.</b>],  ack 78, win 501, length 0</pre>
+    <div class="note">
+      <span class="tag">Decoding tcpdump&rsquo;s flag shorthand</span>
+      <p><span class="m">S</span> = SYN &nbsp;·&nbsp; <span class="m">S.</span> = SYN+ACK &nbsp;·&nbsp; <span class="m">.</span> = ACK alone &nbsp;·&nbsp; <span class="m">P.</span> = PSH+ACK &nbsp;·&nbsp; <span class="m">F.</span> = FIN+ACK &nbsp;·&nbsp; <span class="m">R</span> = RST. The dot <em>is</em> the ACK bit. Note <span class="m">ack 2847113020</span> in line 2 — that is the client&rsquo;s ISN plus one, the phantom byte the SYN consumed. Note also <span class="m">win 502</span> in line 3: with <span class="m">wscale 7</span> that is 502 × 128 = <strong>64,256 bytes</strong>, not 502.</p>
+    </div>
+
+    <h3 style="margin-top:26px">Inspect live connections</h3>
+    <pre><span class="cm"># every TCP socket, with its state, and the internals: cwnd, RTT, retransmits</span>
+$ ss -tin
+
+ESTAB  0  0  10.0.0.4:52741  93.184.216.34:443
+   cubic wscale:7,7 rto:204 <b>rtt:3.5/1.75</b> mss:1448 <b>cwnd:10</b> ssthresh:7
+   bytes_sent:1841 bytes_acked:1842 <b>retrans:0/2</b> rcv_space:14480
+
+<span class="cm"># how many sockets in each state — the fastest health check there is</span>
+$ ss -tan | awk 'NR>1 {print $1}' | sort | uniq -c | sort -rn
+   842 ESTAB
+   319 <b>TIME-WAIT</b>
+     4 LISTEN
+     <b>2 CLOSE-WAIT</b>     <span class="cm">← if this grows and never shrinks, you have a leak</span>
+
+<span class="cm"># listening sockets: Recv-Q is the accept-queue depth, Send-Q is its limit</span>
+$ ss -lnt</pre>
+
+    <h3 style="margin-top:26px">Retransmission and error counters</h3>
+    <pre>$ nstat -az | grep -Ei 'retrans|TCPLostRetransmit|TCPTimeouts|ListenDrops'
+TcpRetransSegs        1204     <span class="cm"># segments resent — as a share of TcpOutSegs, keep it well under 1%</span>
+TcpExtTCPTimeouts      118     <span class="cm"># RTO fired — expensive, cwnd collapsed each time</span>
+TcpExtListenDrops        0     <span class="cm"># accept queue overflowed — your app is too slow to accept()</span>
+
+$ netstat -s | grep -A4 'Tcp:'   <span class="cm"># the portable equivalent</span></pre>
+
+    <h3 style="margin-top:26px">Useful Wireshark filters</h3>
+    <div class="tbl-scroll" style="margin-top:8px">
+      <table>
+        <thead><tr><th>Filter</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td class="n">tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0</td><td>every connection attempt</td></tr>
+          <tr><td class="n">tcp.analysis.retransmission</td><td>every resent segment</td></tr>
+          <tr><td class="n">tcp.analysis.duplicate_ack</td><td>duplicate ACKs — the loss signal</td></tr>
+          <tr><td class="n">tcp.analysis.zero_window</td><td>a receiver that stopped reading</td></tr>
+          <tr><td class="n">tcp.flags.reset==1</td><td>abortive closes</td></tr>
+          <tr><td class="n">tcp.time_delta &gt; 0.2</td><td>gaps over 200 ms — where the latency hides</td></tr>
+          <tr><td class="n">tcp.stream eq 0</td><td>isolate one whole connection (right-click → Follow → TCP Stream)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note" style="margin-top:16px">
+      <span class="tag">Two views worth knowing</span>
+      <p><em>Statistics → Conversations → TCP</em> ranks connections by bytes and duration. <em>Statistics → TCP Stream Graphs → Time Sequence (Stevens)</em> plots sequence number against time — a healthy transfer is a straight diagonal; every flat step is a stall, and every vertical drop is a retransmission. It is the congestion-window sawtooth, measured rather than drawn.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ NOTES REVIEW ══════════════════ -->
+<section id="notes">
+  <div class="col sec-head">
+    <span class="eyebrow">Your notes, reviewed</span>
+    <h2>What was right, and the six things that needed fixing</h2>
+    <p class="sec-sub">Line by line against your original notes. Most of it held up — the port ranges, the handshake, the data-offset arithmetic and the HTTP reasoning were all sound.</p>
+  </div>
+
+  <div style="margin-top:8px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="min-width:230px">Your note</th><th style="min-width:120px">Verdict</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>TCP = Transmission Control Protocol; protocol means a set of rules</td><td><span class="chip ok">Correct</span></td><td>—</td></tr>
+          <tr><td>The application layer doesn&rsquo;t know about the layers below it</td><td><span class="chip">Nuance</span></td><td>True as an abstraction, but it leaks: <span class="m">TCP_NODELAY</span>, <span class="m">SO_RCVBUF</span>, and a blocking <code>send()</code> when the peer&rsquo;s window closes are all TCP showing through.</td></tr>
+          <tr><td>Three-way handshake to open</td><td><span class="chip ok">Correct</span></td><td>Three is the provable minimum: each side&rsquo;s ISN must be both sent and confirmed.</td></tr>
+          <tr><td>Four steps to close</td><td><span class="chip">Nuance</span></td><td>Correct, but the middle ACK and FIN are usually coalesced into one <span class="m">FIN, ACK</span> — three segments in most real traces. Also missing: TIME_WAIT, half-close, and RST.</td></tr>
+          <tr><td>TCP sends HEADER + DATA together</td><td><span class="chip">Nuance</span></td><td>True per segment — but TCP is a <strong>byte stream</strong>. Your <code>send()</code> boundaries do not survive, so &ldquo;one request = one segment&rdquo; is never guaranteed.</td></tr>
+          <tr><td>Header: Data offset (4) | reserved (3) | Flag | Window (16)</td><td><span class="chip d">Fixed</span></td><td>Now <strong>Data Offset (4) · Reserved (4) · Control Bits (8) · Window (16)</strong>. Your 3-bit version was RFC 3540&rsquo;s layout; RFC 8311 made the NS bit historic in 2018 and returned it to reserved.</td></tr>
+          <tr><td>16 bit = 65535 possible values</td><td><span class="chip d">Fixed</span></td><td>16 bits = <strong>65,536</strong> values, 0 through 65,535. For ports the usable count is 65,535 because port 0 is reserved — the right number, by a different route.</td></tr>
+          <tr><td>Well-known 0–1023, registered 1024–49151, dynamic 49152–65535, and the port list</td><td><span class="chip ok">Correct</span></td><td>All accurate, including every port number you listed. Worth adding: Linux&rsquo;s actual ephemeral range is 32768–60999, not IANA&rsquo;s.</td></tr>
+          <tr><td>Chrome &ldquo;does not use a port&rdquo; until it makes a request</td><td><span class="chip">Nuance</span></td><td>It doesn&rsquo;t <em>listen</em> on one. It still gets an ephemeral <em>source</em> port for every connection it opens — the four-tuple requires it.</td></tr>
+          <tr><td>The sender picks a random 32-bit sequence number</td><td><span class="chip">Nuance</span></td><td>Unpredictable, not random. RFC 6528: a 4&nbsp;µs timer plus a keyed hash of the four-tuple, so old segments can&rsquo;t be confused with new ones and outsiders can&rsquo;t guess it.</td></tr>
+          <tr><td>In the SYN, the acknowledgment number is all zeros</td><td><span class="chip ok">Correct</span></td><td>When the ACK flag is clear the field is ignored, and stacks send zero.</td></tr>
+          <tr><td>The final ACK: <span class="m">S-3000 → D-50123</span></td><td><span class="chip d">Fixed</span></td><td>The client sends segment 3, so the ports flip back: <strong><span class="m">S-50123 → D-3000</span></strong>. Your seq=1001 / ack=2001 were exactly right.</td></tr>
+          <tr><td>Data offset: 4 bits, min 5, max 15; header 20–60 bytes</td><td><span class="chip ok">Correct</span></td><td>Precisely right. The unit is 32-bit <em>words</em>, which is where the ×4 comes from.</td></tr>
+          <tr><td>Flags: SYN, ACK, FIN, RST, PSH, PSH, URG, ECE, CWR, NS</td><td><span class="chip d">Fixed</span></td><td>PSH appeared twice. There are eight live bits, in header order: <strong>CWR ECE URG ACK PSH RST SYN FIN</strong>. NS is historic since RFC 8311.</td></tr>
+          <tr><td>&ldquo;The destination port will say the window size&rdquo;</td><td><span class="chip d">Fixed</span></td><td>Not a property of a port or of one side — <strong>every segment carries its own sender&rsquo;s receive window</strong>, in both directions, continuously.</td></tr>
+          <tr><td>The source can send a window&rsquo;s worth of data without an ACK</td><td><span class="chip d">Fixed</span></td><td>Right for flow control, but that&rsquo;s only one of two limits. The real cap is <span class="m">min(rwnd, cwnd)</span> — and <strong>cwnd has no header field at all</strong>. Congestion control was the biggest gap in the notes.</td></tr>
+          <tr><td>Window is 16 bits max</td><td><span class="chip">Nuance</span></td><td>The <em>field</em> is. The <em>window</em> reaches 1 GiB via the Window Scale option — without which fast, long-distance links run at a fraction of their capacity.</td></tr>
+          <tr><td>Checksum uses ones&rsquo; complement</td><td><span class="chip ok">Correct</span></td><td>Worth adding that it also covers a 12-byte pseudo-header of IP fields that is never transmitted.</td></tr>
+          <tr><td>Options and padding</td><td><span class="chip ok">Correct</span></td><td>Padding exists to round the header up to a whole 32-bit word, so Data Offset stays valid.</td></tr>
+          <tr><td>The HTTP handshake-per-request analysis</td><td><span class="chip ok">Correct</span></td><td>Sound throughout. Four refinements added above — chiefly that HTTP/2 removes head-of-line blocking only at the HTTP layer, never at the TCP layer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <div class="key">
+      <span class="tag">What to add next</span>
+      <p>Your notes covered the <em>structure</em> of TCP thoroughly. What they didn&rsquo;t cover is its <em>behaviour over time</em> — congestion control, retransmission timers, and TIME_WAIT. That is where nearly every real-world TCP problem actually lives: a slow API is almost never a header-layout question and almost always an RTO, a closed window, or a connection that should have been reused.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CHEAT SHEET ══════════════════ -->
+<section id="card">
+  <div class="col sec-head">
+    <span class="eyebrow">Reference card</span>
+    <h2>The numbers worth memorising</h2>
+  </div>
+
+  <div class="grid3" style="margin-top:6px">
+    <div class="card">
+      <h4>Header</h4>
+      <p><span class="m">20 B</span> minimum, <span class="m">60 B</span> maximum &nbsp;·&nbsp; Data Offset <span class="m">5–15</span> words &nbsp;·&nbsp; options ceiling <span class="m">40 B</span> &nbsp;·&nbsp; 8 control bits, 4 reserved.</p>
+    </div>
+    <div class="card">
+      <h4>Ports</h4>
+      <p><span class="m">0–1023</span> well-known (root) &nbsp;·&nbsp; <span class="m">1024–49151</span> registered &nbsp;·&nbsp; <span class="m">49152–65535</span> dynamic &nbsp;·&nbsp; Linux actually uses <span class="m">32768–60999</span>.</p>
+    </div>
+    <div class="card">
+      <h4>Sizes</h4>
+      <p>Ethernet MTU <span class="m">1500</span> → IPv4 MSS <span class="m">1460</span>, IPv6 MSS <span class="m">1440</span> &nbsp;·&nbsp; window field max <span class="m">65,535 B</span>, scaled max <span class="m">1 GiB</span> (shift ≤ 14).</p>
+    </div>
+    <div class="card">
+      <h4>Timers</h4>
+      <p>RTO = <span class="m">SRTT + 4·RTTVAR</span>, floor 1 s, doubled on each retry &nbsp;·&nbsp; TIME_WAIT <span class="m">2×MSL</span> = 60 s on Linux &nbsp;·&nbsp; delayed ACK <span class="m">40–200 ms</span>.</p>
+    </div>
+    <div class="card">
+      <h4>Congestion</h4>
+      <p>Initial window <span class="m">10</span> segments &nbsp;·&nbsp; slow start <span class="m">×2</span>/RTT &nbsp;·&nbsp; avoidance <span class="m">+1</span>/RTT &nbsp;·&nbsp; 3 dup ACKs → <span class="m">cwnd ÷ 2</span> &nbsp;·&nbsp; timeout → <span class="m">cwnd = 1</span>.</p>
+    </div>
+    <div class="card">
+      <h4>The two arithmetic rules</h4>
+      <p><span class="m">next_seq = seq + len (+1 if SYN or FIN)</span> &nbsp;·&nbsp; <span class="m">ack = next byte expected</span> &nbsp;·&nbsp; in flight ≤ <span class="m">min(rwnd, cwnd)</span>.</p>
+    </div>
+  </div>
+
+  <div class="col" style="margin-top:22px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Symptom</th><th>Most likely cause</th><th>Check</th></tr></thead>
+        <tbody>
+          <tr><td>Small requests fine, large ones hang</td><td>PMTU black hole — ICMP blocked</td><td class="n">tcp_mtu_probing, try a smaller MSS</td></tr>
+          <tr><td>Latency spikes of almost exactly 40 ms</td><td>Nagle × delayed ACK</td><td class="n">one write per message; TCP_NODELAY</td></tr>
+          <tr><td><span class="m">EADDRNOTAVAIL</span> under load</td><td>ephemeral ports exhausted by TIME_WAIT</td><td class="n">ss -tan | grep -c TIME-WAIT</td></tr>
+          <tr><td>Sockets pile up in CLOSE_WAIT</td><td>your code never calls <code>close()</code></td><td class="n">ss -tan state close-wait</td></tr>
+          <tr><td>Fast link, terrible throughput</td><td>window scaling stripped by a middlebox</td><td class="n">check wscale in the SYN pair</td></tr>
+          <tr><td>Intermittent 502s behind a load balancer</td><td>client idle timeout &gt; LB idle timeout</td><td class="n">lower the client&rsquo;s keep-alive timeout</td></tr>
+          <tr><td>Transfer stalls, then resumes</td><td>receiver advertised a zero window</td><td class="n">tcp.analysis.zero_window</td></tr>
+          <tr><td>Connection dies silently after idle</td><td>NAT or firewall dropped the idle state</td><td class="n">application-level heartbeat</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col foot">
+    <p><strong>TCP on the Wire</strong> — built from a set of study notes, corrected and expanded against RFC 9293 (the 2022 consolidation that obsoletes RFC 793), RFC 7323 (window scale, timestamps, PAWS), RFC 5681 (congestion control), RFC 6298 (RTO), RFC 2018 (SACK), RFC 6528 (ISN), RFC 6928 (initial window 10) and RFC 8311 (ECN experimentation, which retired the NS bit).</p>
+    <p>Every packet in the Lab is a valid segment: the sequence arithmetic, the SACK blocks, the window scaling and the state transitions all check out against the specification.</p>
+  </div>
+</section>
+
+</main>
+<script>
+(function(){
+'use strict';
+var RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs){ var n = document.createElementNS(NS, tag); for(var k in attrs) n.setAttribute(k, attrs[k]); return n; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function nf(n){ return n.toLocaleString('en-US'); }
+
+/* ══════════════════════════════════════════════════════════
+   1. THE LAB — packet ladder
+   ══════════════════════════════════════════════════════════ */
+var ISN_C = 3412887012, ISN_S = 1205663940;
+var CLI = '198.51.100.7:52741', SRV = '203.0.113.42:80';
+var TSOPT = 'NOP, NOP, Timestamps';
+
+var TR = [
+ {t:0, d:'c2s', n:'SYN', f:['SYN'], q:0, a:null, L:0, w:64240, ws:0, doff:10,
+  o:'MSS=1460, SACK-permitted, Timestamps, NOP, WindowScale=8', ss:'SYN-SENT',
+  why:'The client opens. It proposes its Initial Sequence Number and packs every capability it wants into 20 bytes of options — segment size, selective ACK, timestamps, and a window-scale shift of 8.'},
+
+ {t:6, d:'s2c', n:'SYN, ACK', f:['SYN','ACK'], q:0, a:1, L:0, w:65160, ws:0, doff:10,
+  o:'MSS=1460, SACK-permitted, Timestamps, NOP, WindowScale=7', ss:'SYN-RECEIVED', rs:'ESTABLISHED',
+  why:'One segment doing two jobs. ack=1 is the client’s ISN plus the phantom byte its SYN consumed. The server states its own options — these are declarations, not a negotiation of the client’s.'},
+
+ {t:12, d:'c2s', n:'ACK', f:['ACK'], q:1, a:1, L:0, w:251, ws:8, doff:8, o:TSOPT, rs:'ESTABLISHED',
+  why:'Both ISNs are now confirmed and the connection is open. Two things to notice: the ports flipped back to client→server, and the window field is scaled from here on — 251 × 2⁸ = 64,256 bytes.'},
+
+ {t:13, d:'c2s', n:'PSH, ACK · GET', f:['PSH','ACK'], q:1, a:1, L:142, w:251, ws:8, doff:8, o:TSOPT, k:'data',
+  why:'The HTTP request: 142 bytes in a single segment. PSH tells the receiving kernel to wake the server process now instead of waiting for more data to accumulate.'},
+
+ {t:19, d:'s2c', n:'ACK', f:['ACK'], q:1, a:143, L:0, w:509, ws:7, doff:8, o:TSOPT,
+  why:'A pure ACK carrying no data — ack = 1 + 142 = 143. The server’s application is still building the response. Had it replied instantly, this ACK would have been piggybacked on the first data segment instead of costing its own packet.'},
+
+ {t:25, d:'s2c', n:'data 1', f:['ACK'], q:1, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'The response begins. 1,460 bytes — exactly the MSS. The server does not wait for this to be acknowledged: its congestion window permits several segments in flight at once.'},
+
+ {t:27, d:'s2c', n:'data 2', f:['ACK'], q:1461, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'seq jumps by exactly the previous payload length: 1 + 1460 = 1461. Sent while segment 1 is still in flight — this is the window at work.'},
+
+ {t:29, d:'s2c', n:'data 3', f:['ACK'], q:2921, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data', lost:true,
+  why:'This segment is dropped in the network — a full queue at some router. Nobody is notified. No ICMP message, no error. The server will only learn about it from the shape of the ACKs that come back.'},
+
+ {t:31, d:'s2c', n:'data 4', f:['ACK'], q:4381, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'Arrives fine — but out of order, because 2921–4380 is missing. The client cannot deliver these bytes to the application yet; it buffers them and holds the whole stream. This is head-of-line blocking, and it is why HTTP/3 left TCP.'},
+
+ {t:33, d:'s2c', n:'data 5', f:['ACK'], q:5841, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'The server is still unaware of any problem. It keeps filling the window.'},
+
+ {t:33, d:'c2s', n:'ACK 2921', f:['ACK'], q:143, a:2921, L:0, w:240, ws:8, doff:8, o:TSOPT,
+  why:'The first ACK for the body, covering segments 1 and 2 together — delayed ACK acknowledges every second segment. ack=2921 means "I have every byte below 2921." The advertised window dropped to 61,440: those buffered bytes take space.'},
+
+ {t:35, d:'s2c', n:'data 6', f:['ACK'], q:7301, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'The last segment of this window. Six segments went out before a single one was acknowledged.'},
+
+ {t:37, d:'c2s', n:'dup ACK ①', f:['ACK'], q:143, a:2921, L:0, w:234, ws:8, doff:11, o:TSOPT + ', NOP, NOP, SACK', sack:'4381–5841', k:'dup',
+  why:'Duplicate ACK number 1. The cumulative ack is stuck at 2921 — but the SACK block reports that 4381–5840 did arrive. The receiver is describing the exact shape of the hole.'},
+
+ {t:39, d:'c2s', n:'dup ACK ②', f:['ACK'], q:143, a:2921, L:0, w:228, ws:8, doff:11, o:TSOPT + ', NOP, NOP, SACK', sack:'4381–7301', k:'dup',
+  why:'Duplicate 2. The SACK block grows rightward as more segments land beyond the hole. Still only one gap.'},
+
+ {t:41, d:'c2s', n:'dup ACK ③', f:['ACK'], q:143, a:2921, L:0, w:222, ws:8, doff:11, o:TSOPT + ', NOP, NOP, SACK', sack:'4381–8761', k:'dup',
+  why:'Duplicate 3 — the threshold. When this reaches the server it will trigger fast retransmit. Three, not one, because the network reorders packets and a single duplicate is not evidence of loss.'},
+
+ {t:47, d:'s2c', n:'retransmit', f:['ACK'], q:2921, a:143, L:1460, w:509, ws:7, doff:8, o:TSOPT, k:'retx',
+  why:'Fast retransmit. The third duplicate ACK arrived, so the server resends exactly the missing segment — SACK told it not to resend anything else. It also halves its congestion window and continues, without waiting for any timer.'},
+
+ {t:53, d:'c2s', n:'ACK 8761', f:['ACK'], q:143, a:8761, L:0, w:251, ws:8, doff:8, o:TSOPT,
+  why:'The hole is filled, so the cumulative ACK leaps from 2921 all the way to 8761 in one step — acknowledging the retransmission and all four buffered segments at once. The application finally receives 5,840 contiguous bytes it has been waiting on.'},
+
+ {t:59, d:'s2c', n:'PSH, ACK · tail', f:['PSH','ACK'], q:8761, a:143, L:612, w:509, ws:7, doff:8, o:TSOPT, k:'data',
+  why:'The last 612 bytes of the 9,372-byte response. PSH is set because the server’s send buffer is now empty — that is what actually triggers the flag in a modern stack.'},
+
+ {t:65, d:'c2s', n:'ACK 9373', f:['ACK'], q:143, a:9373, L:0, w:251, ws:8, doff:8, o:TSOPT,
+  why:'8761 + 612 = 9373. The entire response is acknowledged. The window is back to its full 64,256 bytes because the application has read everything.'},
+
+ {t:68, d:'c2s', n:'FIN, ACK', f:['FIN','ACK'], q:143, a:9373, L:0, w:251, ws:8, doff:8, o:TSOPT, ss:'FIN-WAIT-1', rs:'CLOSE-WAIT', k:'fin',
+  why:'The client is done sending. FIN carries no data but consumes one sequence number, so the server must acknowledge 144. The client can still receive — this closes one direction only.'},
+
+ {t:74, d:'s2c', n:'ACK', f:['ACK'], q:9373, a:144, L:0, w:509, ws:7, doff:8, o:TSOPT, rs:'FIN-WAIT-2',
+  why:'The server acknowledges the FIN immediately, at kernel level. Its application has not necessarily called close() yet — until it does, this socket sits in CLOSE-WAIT. A pile of those is always an application bug.'},
+
+ {t:76, d:'s2c', n:'FIN, ACK', f:['FIN','ACK'], q:9373, a:144, L:0, w:509, ws:7, doff:8, o:TSOPT, ss:'LAST-ACK', rs:'TIME-WAIT', k:'fin',
+  why:'The server’s application closed, so its own FIN goes out. Its sequence number is 9373 — one past the last body byte. Had it closed instantly at t=74, this and the previous ACK would have been one combined segment, making the close three-way.'},
+
+ {t:82, d:'c2s', n:'ACK', f:['ACK'], q:144, a:9374, L:0, w:251, ws:8, doff:8, o:TSOPT, rs:'CLOSED',
+  why:'The final ACK. The server can free the connection the moment this arrives. The client cannot — it enters TIME_WAIT and holds the four-tuple for 2×MSL, in case this very ACK is lost and the server retransmits its FIN.'}
+];
+var TEND = 105, PROP = 6;
+
+var PHASES = [
+ {t:-1.4, s:'OPEN · THREE-WAY HANDSHAKE'},
+ {t:11.3, s:'REQUEST'},
+ {t:23.4, s:'RESPONSE · SIX SEGMENTS IN FLIGHT'},
+ {t:36.0, s:'LOSS DETECTED · DUPLICATE ACKS'},
+ {t:45.7, s:'FAST RETRANSMIT'},
+ {t:57.6, s:'TAIL OF RESPONSE'},
+ {t:66.6, s:'CLOSE · FOUR-WAY TEARDOWN'},
+ {t:80.6, s:'TIME_WAIT · 2 × MSL'}
+];
+var ANN = [
+ {t:21.2, x:474, anc:'start', s:'application builds the response'},
+ {t:30.6, x:462, anc:'end',   s:'dropped — nobody is told'},
+ {t:43.6, x:86,  anc:'end',   s:'bytes buffered, not deliverable'},
+ {t:49.4, x:474, anc:'start', s:'3rd duplicate → resend now'},
+ {t:55.0, x:86,  anc:'end',   s:'hole filled, 5,840 B released'},
+ {t:84.4, x:86,  anc:'end',   s:'holds the four-tuple ~60 s'},
+ {t:100,  x:86,  anc:'end',   s:'timer expires → CLOSED'}
+];
+
+var LW = 560, XC = 92, XS = 468, TOP = 74, PX = 14;
+var LH = Math.round(TOP + TEND * PX + 30);
+function Y(t){ return TOP + t * PX; }
+
+var svg = document.getElementById('ladder');
+var scroller = document.getElementById('ladScroll');
+var sel = 0, T = TEND, playing = false, lastTs = 0;
+
+function buildLadder(){
+  if(!svg) return;
+  svg.setAttribute('viewBox', '0 0 ' + LW + ' ' + LH);
+  svg.setAttribute('width', LW);
+  svg.setAttribute('height', LH);
+
+  [[XC,'CLIENT','198.51.100.7:52741'], [XS,'SERVER','203.0.113.42:80']].forEach(function(h){
+    var a = el('text', {class:'lad-host', x:h[0], y:20, 'text-anchor':'middle'});
+    a.textContent = h[1];
+    var b = el('text', {class:'lad-addr', x:h[0], y:33, 'text-anchor':'middle'});
+    b.textContent = h[2];
+    svg.appendChild(a); svg.appendChild(b);
+    svg.appendChild(el('line', {class:'lad-line', x1:h[0], y1:42, x2:h[0], y2:LH-8}));
+  });
+
+  PHASES.forEach(function(p){
+    var y = Y(p.t);
+    svg.appendChild(el('line', {class:'lad-phase-line', x1:8, y1:y, x2:LW-8, y2:y}));
+    var tx = el('text', {class:'lad-phase', x:10, y:y-5}); tx.textContent = p.s;
+    svg.appendChild(tx);
+  });
+
+  ANN.forEach(function(a){
+    var tx = el('text', {class:'lad-ann', x:a.x, y:Y(a.t), 'text-anchor':a.anc});
+    tx.textContent = a.s; svg.appendChild(tx);
+  });
+
+  TR.forEach(function(e, i){
+    var c2s = e.d === 'c2s';
+    e._sx = c2s ? XC + 4 : XS - 4;
+    e._ex = c2s ? XS - 4 : XC + 4;
+    e._sy = Y(e.t);
+    e._ey = Y(e.t + PROP);
+    e._lx = c2s ? 205 : 355;
+
+    var g = el('g', {class:'pk ' + e.d + (e.lost ? ' lost' : ''), tabindex:'0', role:'button'});
+    g.setAttribute('aria-label', 'Segment ' + (i+1) + ': ' + e.n);
+    e._wire = el('line', {class:'wire', x1:e._sx, y1:e._sy, x2:e._sx, y2:e._sy});
+    e._head = el('polygon', {class:'head', points:'0,0 0,0 0,0'});
+    e._ring = el('circle', {class:'ring', cx:e._ex, cy:e._ey, r:6});
+    e._dot  = el('circle', {class:'head', cx:e._sx, cy:e._sy, r:3.6, opacity:0});
+    e._lbl  = el('text', {class:'lbl', x:e._lx, y:e._sy + 19, 'text-anchor':'middle'});
+    e._lbl.textContent = e.n;
+    e._sub  = el('text', {class:'lbl', x:e._lx, y:e._sy + 30, 'text-anchor':'middle',
+                          style:'font-weight:400;font-size:9.5px'});
+    e._sub.textContent = subLabel(e);
+    e._hit  = el('line', {class:'hit', x1:e._sx, y1:e._sy, x2:e._ex, y2:e._ey});
+
+    g.appendChild(e._wire); g.appendChild(e._head); g.appendChild(e._dot);
+    g.appendChild(e._ring); g.appendChild(e._lbl); g.appendChild(e._sub); g.appendChild(e._hit);
+    if(e.lost){
+      var mx = e._sx + (e._ex - e._sx) * 0.55, my = e._sy + (e._ey - e._sy) * 0.55;
+      g.appendChild(el('line', {class:'lad-x', x1:mx-6, y1:my-6, x2:mx+6, y2:my+6}));
+      g.appendChild(el('line', {class:'lad-x', x1:mx+6, y1:my-6, x2:mx-6, y2:my+6}));
+    }
+    g.addEventListener('click', function(){ select(i); });
+    g.addEventListener('keydown', function(ev){ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); select(i); } });
+    svg.appendChild(g);
+    e._g = g;
+  });
+}
+
+function subLabel(e){
+  var p = 'seq=' + e.q;
+  if(e.a !== null && e.a !== undefined) p += ' ack=' + e.a;
+  if(e.L) p += ' len=' + e.L;
+  return p;
+}
+
+function paint(t){
+  TR.forEach(function(e){
+    var g = e._g;
+    if(t < e.t){ g.style.display = 'none'; return; }
+    g.style.display = '';
+    var p = clamp((t - e.t) / PROP, 0, 1);
+    var f = e.lost ? Math.min(p, 0.55) : p;
+    var cx = e._sx + (e._ex - e._sx) * f;
+    var cy = e._sy + (e._ey - e._sy) * f;
+    e._wire.setAttribute('x2', cx);
+    e._wire.setAttribute('y2', cy);
+    var done = f >= 1;
+    e._dot.setAttribute('opacity', (!done && !e.lost) ? 1 : 0);
+    e._dot.setAttribute('cx', cx); e._dot.setAttribute('cy', cy);
+    if(done && !e.lost){
+      var x = e._ex, y = e._ey, s = (e.d === 'c2s') ? 1 : -1;
+      e._head.setAttribute('points', x+','+y+' '+(x-11*s)+','+(y-5)+' '+(x-9*s)+','+(y+5));
+      e._head.setAttribute('opacity', 1);
+    } else {
+      e._head.setAttribute('opacity', 0);
+    }
+    var lo = clamp(p * 2.6, 0, 1);
+    e._lbl.setAttribute('opacity', lo);
+    e._sub.setAttribute('opacity', lo);
+  });
+  markSel();
+}
+
+function markSel(){
+  TR.forEach(function(e, i){ e._g.classList.toggle('sel', i === sel); });
+}
+
+var STATE_INIT = {c:'CLOSED', s:'LISTEN'};
+function statesAt(t){
+  var c = STATE_INIT.c, s = STATE_INIT.s;
+  for(var i=0; i<TR.length; i++){
+    var e = TR[i], senderIsClient = (e.d === 'c2s');
+    if(e.ss && t >= e.t){ if(senderIsClient) c = e.ss; else s = e.ss; }
+    if(e.rs && !e.lost && t >= e.t + PROP){ if(senderIsClient) s = e.rs; else c = e.rs; }
+  }
+  if(t >= 100) c = 'CLOSED';
+  return {c:c, s:s};
+}
+
+var stC = document.getElementById('stC'), stS = document.getElementById('stS');
+var smC = document.getElementById('smC'), smS = document.getElementById('smS');
+var smNodes = document.querySelectorAll('.sm-node');
+function syncStates(t){
+  var st = statesAt(t);
+  if(stC) stC.textContent = st.c;
+  if(stS) stS.textContent = st.s;
+  if(smC) smC.textContent = 'client · ' + st.c;
+  if(smS) smS.textContent = 'server · ' + st.s;
+  for(var i=0; i<smNodes.length; i++){
+    var n = smNodes[i], v = n.getAttribute('data-state');
+    n.classList.toggle('act', v === st.c);
+    n.classList.toggle('acts', v === st.s);
+  }
+}
+
+var CKS = TR.map(function(_, i){ return '0x' + ((0x8f2e + i * 0x9e37) & 0xffff).toString(16).toUpperCase().padStart(4, '0'); });
+var ALLFLAGS = ['CWR','ECE','URG','ACK','PSH','RST','SYN','FIN'];
+
+function row(k, v){ return '<dt>' + k + '</dt><dd>' + v + '</dd>'; }
+function grp(k){ return '<dt class="grp">' + k + '</dt>'; }
+
+function select(i){
+  sel = i; markSel();
+  var e = TR[i];
+  var c2s = e.d === 'c2s';
+  var from = c2s ? CLI : SRV, to = c2s ? SRV : CLI;
+  var sp = c2s ? 52741 : 80, dp = c2s ? 80 : 52741;
+  var isn = c2s ? ISN_C : ISN_S, pisn = c2s ? ISN_S : ISN_C;
+
+  var ttl = document.getElementById('inspTitle');
+  ttl.innerHTML = '<span class="chip ' + (c2s ? 'c' : 's') + '">' + (c2s ? 'client → server' : 'server → client') + '</span>'
+                + '<span>' + e.n + '</span>'
+                + (e.lost ? ' <span class="chip d">dropped</span>' : '');
+  document.getElementById('inspWhy').textContent = e.why;
+
+  var bits = ALLFLAGS.map(function(f){
+    return '<span class="fb' + (e.f.indexOf(f) >= 0 ? ' on' : '') + '">' + f + '</span>';
+  }).join('');
+
+  var winTxt;
+  if(e.ws > 0){
+    winTxt = nf(e.w) + ' <span class="sub">× 2<sup>' + e.ws + '</sup> = <b>' + nf(e.w * Math.pow(2, e.ws)) + ' bytes</b></span>';
+  } else {
+    winTxt = nf(e.w) + ' <span class="sub">bytes — unscaled, the option is not in effect yet</span>';
+  }
+
+  var h = '';
+  h += grp('frame');
+  h += row('from', from);
+  h += row('to', to);
+  h += grp('tcp header · ' + (e.doff * 4) + ' bytes');
+  h += row('src port', sp);
+  h += row('dst port', dp);
+  h += row('sequence', e.q + ' <span class="sub">rel</span><br><span class="sub">' + nf(isn + e.q) + ' absolute</span>');
+  h += row('acknowledgment', (e.a === null || e.a === undefined)
+        ? '0 <span class="sub">— ignored, ACK flag is clear</span>'
+        : e.a + ' <span class="sub">rel</span><br><span class="sub">' + nf(pisn + e.a) + ' absolute</span>');
+  h += row('data offset', e.doff + ' <span class="sub">words = ' + (e.doff * 4) + ' B</span>');
+  h += row('reserved', '0 0 0 0');
+  h += row('control bits', '<div class="flagbits">' + bits + '</div>');
+  h += row('window', winTxt);
+  h += row('checksum', CKS[i] + ' <span class="sub">valid</span>');
+  h += row('urgent ptr', '0');
+  h += grp('options · ' + (e.doff * 4 - 20) + ' bytes');
+  h += row('list', e.o);
+  if(e.sack) h += row('SACK block', '<b>' + e.sack + '</b> <span class="sub">received out of order</span>');
+  h += grp('payload');
+  h += row('length', e.L ? nf(e.L) + ' bytes' : '0 <span class="sub">— control segment</span>');
+  if(e.L) h += row('covers bytes', e.q + ' … ' + (e.q + e.L - 1));
+  var nxt = e.q + e.L + ((e.f.indexOf('SYN') >= 0 || e.f.indexOf('FIN') >= 0) ? 1 : 0);
+  h += row('next seq', nxt + (e.L === 0 && nxt === e.q ? ' <span class="sub">— consumes nothing</span>' : ''));
+
+  document.getElementById('inspBody').innerHTML = '<dl class="kv">' + h + '</dl>';
+}
+
+var clockEl = document.getElementById('labClock');
+function setClock(t){
+  var n = 0;
+  for(var i=0; i<TR.length; i++) if(t >= TR[i].t) n++;
+  if(clockEl) clockEl.textContent = n + ' / ' + TR.length + ' segments';
+}
+
+function autoScroll(t){
+  if(!scroller) return;
+  var target = Y(t) - scroller.clientHeight * 0.55;
+  scroller.scrollTop = clamp(target, 0, LH);
+}
+
+var playBtn = document.getElementById('labPlay');
+function setPlayLabel(){ if(playBtn) playBtn.innerHTML = playing ? '❚❚&nbsp; Pause' : '▶&nbsp; Play'; }
+
+function frame(ts){
+  if(!playing) return;
+  if(!lastTs) lastTs = ts;
+  var dt = Math.min((ts - lastTs) / 1000, 0.1);
+  lastTs = ts;
+  var speed = (+document.getElementById('labSpeed').value) * 2.6;
+  T += dt * speed;
+  if(T >= TEND){ T = TEND; playing = false; setPlayLabel(); }
+  paint(T); syncStates(T); setClock(T); autoScroll(T);
+  if(playing) requestAnimationFrame(frame);
+}
+
+if(svg){
+  buildLadder();
+  paint(TEND); syncStates(TEND); setClock(TEND); select(0);
+
+  playBtn.addEventListener('click', function(){
+    if(playing){ playing = false; setPlayLabel(); return; }
+    if(T >= TEND) T = 0;
+    playing = true; lastTs = 0; setPlayLabel();
+    requestAnimationFrame(frame);
+  });
+  document.getElementById('labStep').addEventListener('click', function(){
+    playing = false; setPlayLabel();
+    var next = null, ni = 0;
+    for(var i=0; i<TR.length; i++){ if(TR[i].t > T + 0.001){ next = TR[i]; ni = i; break; } }
+    if(next === null){ T = TEND; paint(T); syncStates(T); setClock(T); return; }
+    T = next.t + PROP;
+    paint(T); syncStates(T); setClock(T); autoScroll(T); select(ni);
+  });
+  document.getElementById('labReset').addEventListener('click', function(){
+    playing = false; setPlayLabel(); T = 0;
+    paint(T); syncStates(T); setClock(T);
+    scroller.scrollTop = 0;
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   2. HEADER FIELD EXPLORER
+   ══════════════════════════════════════════════════════════ */
+var FIELDS = {
+ sport:{n:'Source Port', off:'bytes 0–1 · 16 bits',
+  d:'Identifies the sending socket. On a client this is an ephemeral port the kernel picked for this connection; on a server it is the well-known port it listens on. It swaps with the destination port on every segment, because direction reverses.',
+  g:'There is no IP address anywhere in the TCP header. TCP borrows addresses from the IP layer beneath it — which is precisely why the checksum has to pull them back in through a pseudo-header.'},
+ dport:{n:'Destination Port', off:'bytes 2–3 · 16 bits',
+  d:'Identifies the receiving socket. Together with the source port and both IP addresses this forms the four-tuple that uniquely names the connection in the kernel’s table.',
+  g:'Port 0 is reserved and never appears on the wire. Binding to port 0 in the socket API means “pick any free port for me”, not “use port 0”.'},
+ seq:{n:'Sequence Number', off:'bytes 4–7 · 32 bits',
+  d:'The number of the first data byte carried in this segment. Not a packet counter — TCP numbers bytes, and this is the single fact that makes a packet trace readable. In a SYN or FIN segment it is the number the phantom byte occupies.',
+  g:'It wraps at 2³² (about 4.3 billion). On a 100 Gbit/s link that takes under half a second, which is why the Timestamps option carries the PAWS check to reject segments left over from a previous trip around the sequence space.'},
+ ack:{n:'Acknowledgment Number', off:'bytes 8–11 · 32 bits',
+  d:'The next sequence number the sender of this segment expects to receive — which implicitly acknowledges every byte below it. Valid only when the ACK flag is set; in a bare SYN the field is sent as zero and ignored.',
+  g:'It is purely cumulative, so it cannot describe a gap. ack=2921 says nothing about whether bytes 4381–5840 arrived. Filling that blind spot is the entire purpose of the SACK option.'},
+ doff:{n:'Data Offset', off:'byte 12, high nibble · 4 bits',
+  d:'The length of the TCP header in 32-bit words — equivalently, where the payload begins. The minimum legal value is 5 (20 bytes, no options); the maximum a 4-bit field can hold is 15 (60 bytes).',
+  g:'That ceiling leaves only 40 bytes for options. A modern SYN already spends 20 of them on MSS, SACK-permitted, Timestamps and Window Scale — which is a large part of why new TCP extensions are so hard to deploy.'},
+ rsvd:{n:'Reserved', off:'byte 12, low nibble · 4 bits',
+  d:'Four bits that must be transmitted as zero and ignored on receipt. Space held for future use.',
+  g:'Most textbooks and diagrams show 3 reserved bits plus an NS flag — that was RFC 3540’s layout. RFC 8311 reclassified NS as historic in 2018 and the bit came back here. Both diagrams exist in the wild; this is the current one.'},
+ ctrl:{n:'Control Bits', off:'byte 13 · 8 bits',
+  d:'Eight flags, most significant first: CWR, ECE, URG, ACK, PSH, RST, SYN, FIN. They determine what kind of segment this is — a connection request, an acknowledgment, data, a teardown, or an abort.',
+  g:'SYN and FIN each consume one sequence number despite carrying no payload. That is why the handshake acknowledges ISN + 1, and why a FIN is retransmitted reliably just like data.'},
+ win:{n:'Window', off:'bytes 14–15 · 16 bits',
+  d:'How many more bytes the sender of this segment can currently accept into its receive buffer. This is flow control, advertised continuously and independently by both ends, on every single segment including pure ACKs.',
+  g:'Multiply it by 2^S, where S is the window scale agreed during the handshake. Reading the raw field as bytes is the most common misreading of a packet trace: “win 502” with wscale 7 means 64,256 bytes, not 502.'},
+ cks:{n:'Checksum', off:'bytes 16–17 · 16 bits',
+  d:'A ones’-complement sum covering a 12-byte pseudo-header of IP fields, the TCP header, and the payload. Mandatory in TCP — unlike UDP over IPv4, where it was optional.',
+  g:'Your network card probably computes it, not the kernel. That is why tcpdump on the sending host frequently reports “cksum incorrect” for outbound packets: you are seeing them before the hardware fills the field in. Nothing is wrong.'},
+ urg:{n:'Urgent Pointer', off:'bytes 18–19 · 16 bits',
+  d:'When the URG flag is set, an offset from the sequence number to the end of data marked urgent — historically used for Ctrl-C over Telnet.',
+  g:'Effectively dead. Implementations never agreed on whether the pointer marks the last urgent byte or the one after it, so RFC 6093 advises new applications not to use it at all. Today its main appearance is in intrusion-detection evasion tricks that exploit exactly that disagreement.'},
+ opt:{n:'Options and Padding', off:'bytes 20–59 · 0 to 320 bits',
+  d:'Type–length–value entries, zero-padded up to a whole 32-bit word so that Data Offset stays valid. Some appear only in the SYN — MSS (kind 2), Window Scale (3), SACK-permitted (4). Others ride on every segment — Timestamps (8), SACK blocks (5). Kind 1 is NOP, a one-byte filler used to align the others.',
+  g:'Middleboxes that strip options they do not recognise silently disable window scaling and SACK. The symptom is a fast, long-distance link stuck at a few Mbit/s with no errors reported anywhere — compare the wscale values in both SYNs to catch it.'}
+};
+
+var hdrMap = document.getElementById('hdrMap'), hdrDetail = document.getElementById('hdrDetail');
+function showField(k){
+  var f = FIELDS[k];
+  if(!f) return;
+  hdrDetail.innerHTML = '<h4>' + f.n + ' <span class="off">' + f.off + '</span></h4>'
+    + '<p>' + f.d + '</p>'
+    + '<div class="gotcha"><b>In practice</b>' + f.g + '</div>';
+  var btns = hdrMap.querySelectorAll('.fld');
+  for(var i=0; i<btns.length; i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-f') === k);
+}
+if(hdrMap){
+  hdrMap.addEventListener('click', function(ev){
+    var b = ev.target.closest('.fld');
+    if(b) showField(b.getAttribute('data-f'));
+  });
+  showField('seq');
+}
+
+/* ══════════════════════════════════════════════════════════
+   3. FLAG COMPOSER
+   ══════════════════════════════════════════════════════════ */
+var FLAGDEF = [
+  {n:'CWR', b:0x80, t:'bit 7 · congestion window reduced'},
+  {n:'ECE', b:0x40, t:'bit 6 · ECN echo'},
+  {n:'URG', b:0x20, t:'bit 5 · urgent pointer valid'},
+  {n:'ACK', b:0x10, t:'bit 4 · ack field valid'},
+  {n:'PSH', b:0x08, t:'bit 3 · deliver now'},
+  {n:'RST', b:0x04, t:'bit 2 · reset'},
+  {n:'SYN', b:0x02, t:'bit 1 · synchronise'},
+  {n:'FIN', b:0x01, t:'bit 0 · finish'}
+];
+var VERDICTS = {
+ '':'Nothing set. Illegal on a live connection — every segment after the initial SYN must carry ACK. Scanners send these deliberately as a “null scan”: a closed port replies RST, an open one stays silent, which fingerprints the OS.',
+ 'SYN':'<b>Connection request — an active open.</b> The first segment of a connection, and the only one that may carry SYN without ACK. It proposes an ISN, carries the negotiable options, and consumes one sequence number.',
+ 'ACK,SYN':'<b>Connection accepted.</b> The second segment of the handshake, doing two jobs at once: acknowledging the peer’s ISN and proposing its own. This dual role is the reason the handshake needs three segments rather than four.',
+ 'ACK':'<b>A plain acknowledgment.</b> By far the most common segment on the internet. It may carry payload or none at all; a pure ACK with no data is 20–52 bytes of pure overhead, which is exactly what delayed ACK exists to reduce.',
+ 'ACK,PSH':'<b>Data, deliver it now.</b> The receiving kernel should hand this to the application rather than buffer for more. Modern stacks set PSH automatically on the last segment of a write burst, so it marks the end of a request or response body.',
+ 'ACK,FIN':'<b>Graceful close of one direction.</b> “I have no more data to send; you may keep sending.” Consumes one sequence number and must be acknowledged. This is a half-close, not a full teardown.',
+ 'FIN':'A FIN without ACK. Legal only in the vanishingly rare case of a connection that never established. In practice a bare FIN on the wire is a <b>FIN scan</b> probing for open ports.',
+ 'RST':'<b>Abort.</b> Tears the connection down immediately — no acknowledgment, no confirmation, queued data discarded. This is what you get from connecting to a closed port.',
+ 'ACK,RST':'<b>Reset in response to a segment.</b> The usual form when a segment arrives for a connection that does not exist — after a crash and restart, or when a firewall injects a reset to block traffic. Surfaces to the application as ECONNRESET.',
+ 'ACK,URG':'Urgent data on an established connection. Vanishingly rare in legitimate modern traffic; treat it as a red flag in a capture.',
+ 'URG,PSH,FIN':'<b>The “XMAS” scan.</b> Named for having the packet “lit up like a Christmas tree.” No legitimate stack ever sends this — it exists purely to provoke a distinguishing reply from closed versus open ports.',
+ 'SYN,FIN':'<b>Illegal.</b> Open and close simultaneously is a contradiction. Used to slip past naive filters that only match on SYN alone. Any modern firewall drops it on sight.',
+ 'ACK,SYN,FIN':'<b>Illegal.</b> Another evasion pattern — no conforming stack emits it.',
+ 'ECE,ACK,SYN':'<b>ECN-capable handshake response.</b> The server is agreeing to explicit congestion notification, so routers can signal congestion by marking packets instead of dropping them.',
+ 'CWR,ECE,SYN':'<b>ECN-capable connection request.</b> The client offers explicit congestion notification. Both bits in a SYN is how the offer is encoded.',
+ 'CWR,ACK':'<b>“I have slowed down.”</b> The sender is confirming it reduced its congestion window after receiving an ECN echo. The peer can now stop setting ECE.',
+ 'ECE,ACK':'<b>“The network is congested.”</b> A router marked a packet on this flow rather than dropping it, and the receiver is echoing that back. The sender should reduce cwnd exactly as if it had seen a loss — congestion signalled at zero cost.'
+};
+var flagState = {};
+var flagGrid = document.getElementById('flagGrid');
+function renderFlags(){
+  var on = FLAGDEF.filter(function(f){ return flagState[f.n]; });
+  var bits = FLAGDEF.map(function(f){ return flagState[f.n] ? '1' : '0'; }).join(' ');
+  var hex = on.reduce(function(a, f){ return a | f.b; }, 0);
+  document.getElementById('flagBits').textContent = bits;
+  document.getElementById('flagHex').textContent = '0x' + hex.toString(16).toUpperCase().padStart(2, '0');
+  var key = on.map(function(f){ return f.n; }).join(',');
+  var v = VERDICTS[key];
+  if(!v){
+    if(flagState.SYN && flagState.FIN) v = '<b>Illegal combination.</b> SYN and FIN together mean “open and close at once.” No conforming stack sends it; it exists to evade filters that match on SYN alone.';
+    else if(flagState.RST) v = 'A reset with additional bits set. RST alone is the normal form — extra flags here suggest a crafted packet rather than a real stack.';
+    else if(!flagState.ACK) v = '<b>ACK is not set.</b> Every segment after the initial SYN must carry ACK. Without it this segment would be dropped on an established connection.';
+    else v = 'A legal but unusual combination. TCP’s set of everyday segments is small — SYN, SYN+ACK, ACK, PSH+ACK, FIN+ACK and RST cover essentially all real traffic.';
+  }
+  document.getElementById('flagVerdict').innerHTML = v;
+  var btns = flagGrid.querySelectorAll('.flag-btn');
+  for(var i=0; i<btns.length; i++){
+    btns[i].setAttribute('aria-pressed', flagState[btns[i].getAttribute('data-n')] ? 'true' : 'false');
+  }
+}
+if(flagGrid){
+  flagGrid.innerHTML = FLAGDEF.map(function(f){
+    return '<button class="flag-btn" data-n="' + f.n + '" aria-pressed="false">'
+         + '<span class="fname">' + f.n + '</span><span class="fbit">' + f.t + '</span></button>';
+  }).join('');
+  flagGrid.addEventListener('click', function(ev){
+    var b = ev.target.closest('.flag-btn');
+    if(!b) return;
+    var n = b.getAttribute('data-n');
+    flagState[n] = !flagState[n];
+    renderFlags();
+  });
+  document.getElementById('flagReset').addEventListener('click', function(){
+    flagState = {}; renderFlags();
+  });
+  flagState.SYN = true;
+  renderFlags();
+}
+
+/* ══════════════════════════════════════════════════════════
+   4. SLIDING WINDOW
+   ══════════════════════════════════════════════════════════ */
+var WTOTAL = 48, wUna = 0, wNxt = 0, wWin = 10, wRun = !RM, wZero = false, wTick = 0, wPend = [];
+var winStrip = document.getElementById('winStrip');
+function winRender(){
+  var eff = wZero ? 0 : wWin;
+  var right = Math.min(wUna + eff, WTOTAL);
+  var html = '';
+  for(var i=0; i<WTOTAL; i++){
+    var c = 'b-no';
+    if(i < wUna) c = 'b-ack';
+    else if(i < wNxt) c = 'b-fly';
+    else if(i < right) c = 'b-use';
+    html += '<div class="cellB ' + c + '"></div>';
+  }
+  winStrip.innerHTML = html;
+  document.getElementById('winUna').textContent = wUna;
+  document.getElementById('winNxt').textContent = wNxt;
+  document.getElementById('winFly').textContent = (wNxt - wUna) + ' KB';
+  document.getElementById('winUse').textContent = Math.max(0, right - wNxt) + ' KB';
+  var msg = '';
+  if(wZero) msg = 'window = 0 · sender stalled · persist timer sends a 1-byte probe';
+  else if(right - wNxt <= 0 && wNxt < WTOTAL) msg = 'window full — nothing may be sent until an ACK arrives';
+  document.getElementById('winMsg').textContent = msg;
+}
+function winStep(){
+  if(!wRun) return;
+  wTick++;
+  while(wPend.length && wPend[0].at <= wTick) wUna += wPend.shift().n;
+  var eff = wZero ? 0 : wWin;
+  var usable = Math.max(0, Math.min(wUna + eff, WTOTAL) - wNxt);
+  var send = Math.min(usable, 2);
+  if(send > 0){ wNxt += send; wPend.push({at: wTick + 4, n: send}); }
+  if(wUna >= WTOTAL){ wUna = 0; wNxt = 0; wPend = []; }
+  winRender();
+}
+if(winStrip){
+  winRender();
+  setInterval(winStep, 430);
+  var wp = document.getElementById('winPlay');
+  wp.innerHTML = wRun ? '❚❚&nbsp; Pause' : '▶&nbsp; Play';
+  wp.addEventListener('click', function(){
+    wRun = !wRun; wp.innerHTML = wRun ? '❚❚&nbsp; Pause' : '▶&nbsp; Play';
+  });
+  var ws = document.getElementById('winSize');
+  ws.addEventListener('input', function(){
+    wWin = +ws.value;
+    document.getElementById('winSizeOut').textContent = wWin + ' KB';
+    winRender();
+  });
+  var wz = document.getElementById('winZero');
+  wz.addEventListener('click', function(){
+    wZero = !wZero;
+    wz.setAttribute('aria-pressed', wZero ? 'true' : 'false');
+    wz.textContent = wZero ? 'Receiver reads again' : 'Stall the receiver';
+    document.getElementById('winFoot').textContent = wZero
+      ? 'The receiving application stopped calling recv(). Its buffer filled, it advertised win=0, and the sender is frozen — waiting for a window update it must probe for, because ACKs are not retransmitted.'
+      : 'Regions 2 + 3 together are the advertised window. Its left edge moves when an ACK arrives; its right edge moves when the receiver advertises more room.';
+    winRender();
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   5. SECTION NAV
+   ══════════════════════════════════════════════════════════ */
+var links = Array.prototype.slice.call(document.querySelectorAll('.nav-list a'));
+var secs = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); });
+if('IntersectionObserver' in window){
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(!en.isIntersecting) return;
+      var i = secs.indexOf(en.target);
+      if(i < 0) return;
+      links.forEach(function(a, j){ a.classList.toggle('on', i === j); });
+      var a = links[i], sc = a.parentNode.parentNode;
+      if(sc && sc.scrollWidth > sc.clientWidth){
+        var want = a.offsetLeft - sc.clientWidth / 2 + a.offsetWidth / 2;
+        sc.scrollTo({left: Math.max(0, want), behavior: RM ? 'auto' : 'smooth'});
+      }
+    });
+  }, {rootMargin: '-14% 0px -74% 0px', threshold: 0});
+  secs.forEach(function(s){ if(s) io.observe(s); });
+}
+})();
+</script>
