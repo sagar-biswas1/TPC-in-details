@@ -470,7 +470,7 @@ pre{min-width:0}
         <a href="#checksum">Checksum</a>
         <a href="#http">HTTP</a>
         <a href="#seeit">See it</a>
-        <a href="#notes">Your notes</a>
+        <a href="#notes">Misconceptions</a>
         <a href="#card">Cheat sheet</a>
       </div>
     </div>
@@ -538,7 +538,7 @@ pre{min-width:0}
             </g>
           </svg>
         </div>
-        <figcaption>The three-way handshake, the one exchange every TCP connection begins with. Both sides pick a random starting sequence number and acknowledge each other&rsquo;s — after this, both agree on where the byte stream starts.</figcaption>
+        <figcaption>The three-way handshake, the one exchange every TCP connection begins with. Each side picks its own starting sequence number and acknowledges the other&rsquo;s — after this, both agree on where the byte stream starts.</figcaption>
       </figure>
     </div>
   </div>
@@ -551,7 +551,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">Where TCP sits</span>
     <h2>Four layers, four headers, one bundle of bytes</h2>
-    <p class="sec-sub">Your note said &ldquo;the application layer does not know about bottom layers — it is just an order to pass data.&rdquo; That&rsquo;s the right instinct. Here&rsquo;s the mechanism behind it.</p>
+    <p class="sec-sub">The application layer does not know about the layers beneath it — it hands data down and gets data back. That is the right instinct. Here is the mechanism behind it.</p>
   </div>
   <div class="col sec-body">
     <p>When your code calls <code>send(sock, buf, 1460)</code>, it hands 1,460 bytes to the kernel and gets an integer back. It never sees a port number, a sequence number, or a MAC address. Each layer below it <strong>prepends its own header</strong> and passes the whole thing down — a process called <strong>encapsulation</strong>. On the receiving machine the same layers strip their headers back off, in reverse.</p>
@@ -615,10 +615,10 @@ pre{min-width:0}
 
   <div class="col sec-body" style="margin-top:22px">
     <div class="fix">
-      <span class="tag">Worth refining</span>
+      <span class="tag">The abstraction leaks</span>
       <p>The application <em>is</em> insulated from TCP&rsquo;s mechanics — but it is not fully blind to them. It feels TCP through the socket API: <code>send()</code> blocks (or returns a short count) when the send buffer fills because the receiver&rsquo;s window closed; <code>TCP_NODELAY</code> switches off Nagle&rsquo;s algorithm; <code>SO_RCVBUF</code> caps the window TCP can advertise. The abstraction leaks in exactly the places where performance lives.</p>
     </div>
-    <p>One correction on terminology that trips people up constantly. The unit of data has a different name at every layer, and using the wrong one makes trace-reading confusing:</p>
+    <p>One point of terminology that trips people up constantly. The unit of data has a different name at every layer, and using the wrong one makes trace-reading confusing:</p>
   </div>
 
   <div class="col" style="margin-top:14px">
@@ -642,7 +642,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">The idea everything else hangs on</span>
     <h2>TCP is a stream of bytes, not a stream of messages</h2>
-    <p class="sec-sub">If you take one thing from this page, take this. It explains sequence numbers, it explains why your API keeps breaking, and it is the single most common blind spot in TCP notes.</p>
+    <p class="sec-sub">If you take one thing from this page, take this. It explains sequence numbers, it explains why your API keeps breaking, and it is the single most common blind spot in TCP explanations.</p>
   </div>
   <div class="col sec-body">
     <p>TCP does not transport <em>your messages</em>. It transports <em>a numbered stream of bytes</em>. Every byte in the connection, in each direction, has its own 32-bit number. A segment is just a claim: <span class="m">&ldquo;here are bytes 4381 through 5840&rdquo;</span>.</p>
@@ -709,7 +709,7 @@ pre{min-width:0}
       <p style="font-family:var(--mono);font-size:.95rem">next_seq = seq + len(payload) &nbsp;&nbsp;(+1 if SYN or FIN is set)</p>
       <p>and, on the other side: <span class="m">ack = the next byte I expect</span> — meaning &ldquo;I have every byte below this one.&rdquo;</p>
     </div>
-    <p>SYN and FIN carry no data but each <strong>consumes one sequence number</strong> — a &ldquo;phantom byte.&rdquo; That is <em>why</em> the handshake acknowledges <span class="m">ISN + 1</span>. Your notes had the <span class="m">+1</span> right; this is the reason for it. It also means SYN and FIN are themselves retransmitted reliably, like data.</p>
+    <p>SYN and FIN carry no data but each <strong>consumes one sequence number</strong> — a &ldquo;phantom byte.&rdquo; That is <em>why</em> the handshake acknowledges <span class="m">ISN + 1</span>. It also means SYN and FIN are themselves retransmitted reliably, like data.</p>
     <p>With a 32-bit field the numbers wrap after 4 GiB. On a 100 Gbit/s link that is under half a second, which is one of the reasons the <strong>Timestamps option</strong> (RFC 7323) exists — its PAWS mechanism rejects segments from a previous wrap of the sequence space.</p>
     <div class="note">
       <span class="tag">Reading a trace</span>
@@ -772,15 +772,15 @@ pre{min-width:0}
 
   <div class="col sec-body" style="margin-top:26px">
     <div class="fix">
-      <span class="tag">Correction to your notes</span>
-      <p>You wrote <span class="m">Data offset (4) | reserved (3) | Flag | Window (16)</span>. The current spec is <strong>Data Offset (4) &middot; Reserved (4) &middot; Control Bits (8) &middot; Window (16)</strong>.</p>
-      <p>The 3-bit reserved field you noted is a real layout, just an obsolete one. The history: RFC 793 had 6 reserved bits and 6 flags. RFC 3168 (ECN, 2001) took two of them for <span class="m">ECE</span> and <span class="m">CWR</span>, leaving 4 reserved. RFC 3540 (2003) took a third for the <span class="m">NS</span> nonce-sum bit, leaving 3 — that&rsquo;s the version in most textbooks and diagrams. But <strong>RFC 8311 (2018) reclassified NS as historic</strong>, so the field is back to 4 reserved bits and 8 control bits. All four reserved bits must be sent as zero.</p>
+      <span class="tag">Common mistake</span>
+      <p>Many diagrams show this row as <span class="m">Data Offset (4) | Reserved (3) | NS | Flags (8) | Window (16)</span>. The current spec is <strong>Data Offset (4) &middot; Reserved (4) &middot; Control Bits (8) &middot; Window (16)</strong>.</p>
+      <p>The 3-bit reserved field is a real layout, just an obsolete one. The history: RFC 793 had 6 reserved bits and 6 flags. RFC 3168 (ECN, 2001) took two of them for <span class="m">ECE</span> and <span class="m">CWR</span>, leaving 4 reserved. RFC 3540 (2003) took a third for the <span class="m">NS</span> nonce-sum bit, leaving 3 — that&rsquo;s the version in most textbooks and diagrams. But <strong>RFC 8311 (2018) reclassified NS as historic</strong>, so the field is back to 4 reserved bits and 8 control bits. All four reserved bits must be sent as zero.</p>
     </div>
     <div class="fix">
-      <span class="tag">Correction to your notes</span>
-      <p>You wrote <span class="m">16 bit = 65535</span>. 16 bits encodes <strong>65,536 distinct values — 0 through 65,535</strong>. The 65,535 figure is the largest <em>value</em>, not the count. For ports it works out close to your number anyway, because <strong>port 0 is reserved</strong> and never used on the wire, leaving 65,535 usable ports.</p>
+      <span class="tag">Common mistake</span>
+      <p>&ldquo;16 bits = 65,535 values&rdquo; is off by one. 16 bits encodes <strong>65,536 distinct values — 0 through 65,535</strong>. The 65,535 figure is the largest <em>value</em>, not the count. The usable <em>port</em> count does come out at 65,535, but for a different reason: <strong>port 0 is reserved</strong> and never used on the wire.</p>
     </div>
-    <p>Your reasoning on Data Offset was exactly right, so it&rsquo;s worth spelling out the arithmetic: the field counts <strong>32-bit words</strong>, not bytes. The minimum legal value is 5 (5 &times; 4 = 20 bytes, a header with no options) and the maximum a 4-bit field can hold is 15 (15 &times; 4 = 60 bytes). That 40-byte ceiling on options is a real constraint — it is why TCP extensions fight over space and why a modern SYN carrying MSS, SACK-permitted, Timestamps and Window Scale is already using 20 of the 40 bytes available.</p>
+    <p>The Data Offset arithmetic is worth spelling out: the field counts <strong>32-bit words</strong>, not bytes. The minimum legal value is 5 (5 &times; 4 = 20 bytes, a header with no options) and the maximum a 4-bit field can hold is 15 (15 &times; 4 = 60 bytes). That 40-byte ceiling on options is a real constraint — it is why TCP extensions fight over space and why a modern SYN carrying MSS, SACK-permitted, Timestamps and Window Scale is already using 20 of the 40 bytes available.</p>
   </div>
 </section>
 
@@ -789,7 +789,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">Control bits</span>
     <h2>Eight flags, and what their combinations mean</h2>
-    <p class="sec-sub">Your list had the right set — with one duplicate (PSH appeared twice) and no ordering. Order matters when you read a hex dump, so here they are in header order, most significant bit first.</p>
+    <p class="sec-sub">Order matters when you read a hex dump, so here they are in header order, most significant bit first.</p>
   </div>
 
   <div class="panel">
@@ -840,7 +840,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">Addressing</span>
     <h2>65,536 doors, and how a connection picks two</h2>
-    <p class="sec-sub">Your port ranges were all correct. What&rsquo;s worth adding is the reason they exist, what your OS actually does, and the four-tuple that makes it all work.</p>
+    <p class="sec-sub">The three IANA ranges, the reason they exist, what your OS actually does, and the four-tuple that makes it all work.</p>
   </div>
 
   <div class="col sec-body">
@@ -916,12 +916,12 @@ pre{min-width:0}
   </div>
 
   <div class="col sec-body" style="margin-top:24px">
-    <h3>Ephemeral ports — refining your note</h3>
+    <h3>Ephemeral ports: clients use ports too</h3>
     <div class="fix">
-      <span class="tag">Correction to your notes</span>
-      <p>You wrote that Chrome or a mobile app &ldquo;does not use a port&rdquo; until it makes a request. More precisely: <strong>a client does not <em>listen</em> on a port</strong> — it has no <code>bind()</code> + <code>listen()</code> socket waiting for inbound connections. But the moment it opens a connection, the kernel <strong>must</strong> assign it a local source port, because the four-tuple needs one. It picks an unused one from the ephemeral range. So the port is allocated per <em>connection</em>, not per <em>application</em>, and it is released back to the pool when the connection finishes its TIME_WAIT.</p>
+      <span class="tag">Common mistake</span>
+      <p>It is often said that a browser or a mobile app &ldquo;does not use a port.&rdquo; More precisely: <strong>a client does not <em>listen</em> on a port</strong> — it has no <code>bind()</code> + <code>listen()</code> socket waiting for inbound connections. But the moment it opens a connection, the kernel <strong>must</strong> assign it a local source port, because the four-tuple needs one. It picks an unused one from the ephemeral range. So the port is allocated per <em>connection</em>, not per <em>application</em>, and it is released back to the pool when the connection finishes its TIME_WAIT.</p>
     </div>
-    <p>The IANA dynamic range is 49152–65535, exactly as you noted. Real operating systems mostly ignore it:</p>
+    <p>The IANA dynamic range is 49152–65535. Real operating systems mostly ignore it:</p>
   </div>
 
   <div class="col" style="margin-top:14px">
@@ -1011,7 +1011,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">Opening a connection</span>
     <h2>Why the handshake needs exactly three messages</h2>
-    <p class="sec-sub">Your handshake diagram was correct. Here is what each of the three segments is actually <em>for</em>, and the one number in your worked example that was swapped.</p>
+    <p class="sec-sub">Here is what each of the three segments is actually <em>for</em>, and the detail in the worked example that people most often get wrong.</p>
   </div>
 
   <div class="col sec-body">
@@ -1024,19 +1024,19 @@ pre{min-width:0}
     <p>Two messages would leave the server&rsquo;s ISN unconfirmed. Four would be redundant, because step 2 piggybacks two jobs onto one segment. Three is the minimum — this is a general result for reliable connection setup, not a TCP quirk.</p>
 
     <div class="fix">
-      <span class="tag">Correction to your notes</span>
-      <p>Your worked example had the client using ephemeral port <span class="m">50123</span> and the server on <span class="m">3000</span>. The SYN+ACK line was right (<span class="m">S-3000 → D-50123</span>), but the final ACK repeated it. The third segment is sent <em>by the client</em>, so the ports flip back:</p>
+      <span class="tag">Common mistake</span>
+      <p>Take a client on ephemeral port <span class="m">50123</span> talking to a server on <span class="m">3000</span>. The SYN+ACK travels server→client (<span class="m">src 3000 → dst 50123</span>), and it is tempting to write the final ACK with the same ports. But the third segment is sent <em>by the client</em>, so the ports flip back:</p>
       <pre><span class="cm">1.</span> <span class="cl">SYN</span>       src <span class="cl">50123</span> → dst <span class="sv">3000</span>    seq=1000  ack=—
 <span class="cm">2.</span> <span class="sv">SYN, ACK</span>  src <span class="sv">3000</span>  → dst <span class="cl">50123</span>   seq=2000  ack=1001
 <span class="cm">3.</span> <span class="cl">ACK</span>       src <span class="cl">50123</span> → dst <span class="sv">3000</span>    seq=1001  ack=2001   <b>← ports flip back</b></pre>
-      <p>Your sequence and acknowledgment numbers were exactly right. Source and destination ports always swap with direction — that is how the receiving kernel finds the right socket in its connection table.</p>
+      <p>Source and destination ports always swap with direction — that is how the receiving kernel finds the right socket in its connection table.</p>
     </div>
   </div>
 
   <div class="col sec-body" style="margin-top:24px">
     <h3>The ISN is not really random</h3>
-    <p>You wrote that the sender &ldquo;selects a Sequence number randomly within 32 bits.&rdquo; Close, and the intent is right — but a purely random ISN turned out to be a security hole. If an attacker can guess your ISN, they can inject forged segments into your connection without ever seeing it (the 1994 Mitnick attack).</p>
-    <p>RFC 6528 specifies what stacks actually do:</p>
+    <p>The ISN is usually described as &ldquo;a random 32-bit number.&rdquo; Close, but it has to satisfy two requirements at once. It must be <em>unpredictable</em>: if an attacker can guess your ISN, they can inject forged segments into your connection without ever seeing it (the 1994 Mitnick attack exploited exactly this). And it must keep <em>increasing over time</em>, so that a delayed segment from an earlier connection on the same four-tuple cannot be mistaken for part of the new one.</p>
+    <p>RFC 6528 specifies what stacks actually do to get both:</p>
     <pre>ISN = M + F( localIP, localPort, remoteIP, remotePort, secretKey )
 
   M = a 4-microsecond timer  <span class="cm">— always moving forward</span>
@@ -1096,7 +1096,7 @@ pre{min-width:0}
   <div class="col sec-body" style="margin-top:22px">
     <div class="note">
       <span class="tag">SYN cookies</span>
-      <p>When the SYN queue overflows, Linux can stop allocating memory per half-open connection entirely. It encodes the connection state <em>into the ISN it sends back</em> — a hash of the four-tuple plus a coarse timestamp and an MSS index. If the client&rsquo;s final ACK comes back with <span class="m">ack = cookie + 1</span>, the server recomputes the hash, confirms it, and builds the connection state on the spot. A flood of forged SYNs then costs the server no memory at all. The tradeoff: options negotiated in the original SYN (window scale, SACK, timestamps) mostly can&rsquo;t be recovered, so cookie-built connections perform worse. It is an emergency valve, not a default: <span class="m">net.ipv4.tcp_syncookies = 1</span>.</p>
+      <p>When the SYN queue overflows, Linux can stop allocating memory per half-open connection entirely. It encodes the connection state <em>into the ISN it sends back</em> — a hash of the four-tuple plus a coarse timestamp and an MSS index. If the client&rsquo;s final ACK comes back with <span class="m">ack = cookie + 1</span>, the server recomputes the hash, confirms it, and builds the connection state on the spot. A flood of forged SYNs then costs the server no memory at all. The tradeoff: options negotiated in the original SYN (window scale, SACK, timestamps) mostly can&rsquo;t be recovered, so cookie-built connections perform worse. It is an emergency valve: <span class="m">net.ipv4.tcp_syncookies = 1</span> (the default on most distributions) enables it, but it only engages once the SYN queue overflows.</p>
     </div>
     <div class="note">
       <span class="tag">Skipping the wait: TCP Fast Open</span>
@@ -1110,7 +1110,7 @@ pre{min-width:0}
   <div class="col sec-head">
     <span class="eyebrow">Moving data</span>
     <h2>The sliding window, and who is allowed to send what</h2>
-    <p class="sec-sub">Your note — &ldquo;the source can send that amount of data without ACK&rdquo; — is the right mental model for flow control. It&rsquo;s half of the real answer.</p>
+    <p class="sec-sub">&ldquo;The receiver advertises a window, and the sender may send that much without waiting for an ACK.&rdquo; That is the right mental model for flow control. It is half of the real answer.</p>
   </div>
 
   <div class="col sec-body">
@@ -1150,11 +1150,11 @@ pre{min-width:0}
 
   <div class="col sec-body" style="margin-top:26px">
     <div class="fix">
-      <span class="tag">Correction to your notes</span>
-      <p>You wrote &ldquo;the destination port will say the window size.&rdquo; The window is not a property of a port or of one side. <strong>Every segment carries the sender&rsquo;s own receive window</strong> — so the client tells the server how much <em>the client</em> can accept, and the server tells the client how much <em>the server</em> can accept, continuously, in both directions, on every single segment including pure ACKs.</p>
+      <span class="tag">Common mistake</span>
+      <p>It is tempting to think of the window as something the server announces once, or as a property of one side. It is neither. <strong>Every segment carries the sender&rsquo;s own receive window</strong> — so the client tells the server how much <em>the client</em> can accept, and the server tells the client how much <em>the server</em> can accept, continuously, in both directions, on every single segment including pure ACKs.</p>
     </div>
     <div class="fix">
-      <span class="tag">The bigger correction</span>
+      <span class="tag">The bigger point</span>
       <p>The receiver&rsquo;s window is only <em>one</em> of two limits. The real amount a sender may have outstanding is:</p>
       <pre style="background:var(--surface);margin-top:4px">in flight  ≤  min( <b>rwnd</b> , <b>cwnd</b> )
 
@@ -1271,8 +1271,8 @@ pre{min-width:0}
   RTTVAR = 0.75 × RTTVAR + 0.25 × |SRTT − R|   <span class="cm">how jittery is this path?</span>
   SRTT   = 0.875 × SRTT   + 0.125 × R          <span class="cm">smoothed round-trip time</span>
 
-  RTO    = SRTT + 4 × RTTVAR                   <span class="cm">then clamped to ≥ 1 s</span></pre>
-    <p>Including the variance term is the crucial part: a path with a steady 200&nbsp;ms RTT gets a tight timeout, while a jittery mobile link with the same average gets a generous one. Before 1988, TCP used the average alone and the internet suffered repeated <strong>congestion collapse</strong> — senders timing out early, retransmitting, and making the congestion worse.</p>
+  RTO    = SRTT + 4 × RTTVAR                   <span class="cm">floor: 1 s in the RFC, 200 ms on Linux</span></pre>
+    <p>Including the variance term is the crucial part: a path with a steady 200&nbsp;ms RTT gets a tight timeout, while a jittery mobile link with the same average gets a generous one. Before 1988, TCP estimated the timeout from the average alone. Under load, senders timed out early and retransmitted into an already-congested network, which was one of the contributors to the <strong>congestion collapses</strong> of 1986.</p>
     <div class="note">
       <span class="tag">Karn&rsquo;s algorithm</span>
       <p>Never take an RTT sample from a <em>retransmitted</em> segment. When the ACK arrives you cannot tell whether it answers the original or the copy, so the sample would be garbage in either direction. TCP simply discards those samples — and relies on the Timestamps option, which stamps each segment so the ambiguity disappears entirely.</p>
@@ -1391,7 +1391,7 @@ $ sudo sysctl -w net.ipv4.tcp_congestion_control=bbr   <span class="cm"># per-ho
   <div class="col sec-head">
     <span class="eyebrow">Shutting down</span>
     <h2>Four steps, sometimes three, and one state that lingers</h2>
-    <p class="sec-sub">Your four-step teardown was right. What&rsquo;s missing is <em>why</em> it needs four when opening needs three, and what happens in the sixty seconds afterwards.</p>
+    <p class="sec-sub">Closing takes four steps where opening took three. Here is <em>why</em>, and what happens in the sixty seconds afterwards.</p>
   </div>
 
   <div class="col sec-body">
@@ -1422,7 +1422,7 @@ $ sudo sysctl -w net.ipv4.tcp_congestion_control=bbr   <span class="cm"># per-ho
           <text class="lad-ann" x="278" y="200" text-anchor="end">LAST_ACK</text>
         </svg>
       </div>
-      <figcaption>The full four-segment close. Between steps 2 and 3 the connection is <strong>half-open</strong>: the server may still send data, and the client must still read it.</figcaption>
+      <figcaption>The full four-segment close. Between steps 2 and 3 the connection is <strong>half-closed</strong>: the server may still send data, and the client must still read it.</figcaption>
     </figure>
     <figure>
       <div class="fig-box">
@@ -1598,7 +1598,7 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
   <div class="col sec-head">
     <span class="eyebrow">Integrity</span>
     <h2>The checksum, and the addresses hidden inside it</h2>
-    <p class="sec-sub">You had this right — &ldquo;a mechanism so the destination can understand if the source sent wrong data, ones&rsquo; complement.&rdquo; Two details make it more interesting than it looks.</p>
+    <p class="sec-sub">A ones&rsquo;-complement sum that lets the receiver detect corrupted data. Two details make it more interesting than it looks.</p>
   </div>
 
   <div class="col sec-body">
@@ -1634,7 +1634,7 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
 
   <div class="col sec-body" style="margin-top:24px">
     <h3>What it covers — including twelve bytes that are never sent</h3>
-    <p>Here is the part most notes leave out. The checksum is not computed over the TCP segment alone. It also covers a <strong>pseudo-header</strong>, assembled from IP-layer fields, which exists only in memory during the calculation:</p>
+    <p>Here is the part most explanations leave out. The checksum is not computed over the TCP segment alone. It also covers a <strong>pseudo-header</strong>, assembled from IP-layer fields, which exists only in memory during the calculation:</p>
   </div>
 
   <figure style="margin-top:14px">
@@ -1675,7 +1675,7 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
     <div class="note">
       <span class="tag">Three consequences</span>
       <p><strong>NAT must rewrite it.</strong> A router that changes your source IP or port has invalidated the checksum, so it has to recompute — this is why NAT is a transport-layer operation, not a pure network-layer one, and why protocols that embed addresses in their payload (classic FTP, SIP) need special NAT helpers.</p>
-      <p><strong>It is weak, and it is not your only protection.</strong> Sixteen bits catch roughly 1 error in 65,536, and the sum misses whole classes of reordering. It is a last-resort check on top of Ethernet&rsquo;s 32-bit CRC. For data you truly care about, checksum at the application layer.</p>
+      <p><strong>It is weak, and it is not your only protection.</strong> A random corruption has about a 1-in-65,536 chance of slipping past a 16-bit sum, and some errors it cannot see at all — two 16-bit words swapped, for instance, add up to exactly the same value. It is a last-resort check on top of Ethernet&rsquo;s 32-bit CRC. For data you truly care about, checksum at the application layer.</p>
       <p><strong>Your NIC probably computes it.</strong> Checksum offload means the kernel hands the card a segment with a placeholder. Which is why <span class="m">tcpdump</span> on the sending host frequently shows <span class="m">cksum incorrect</span> for outbound packets — you are seeing them before the hardware fills the field in. Nothing is broken.</p>
       <p style="margin-top:2px">One last contrast: <strong>in TCP the checksum is mandatory</strong>. In UDP over IPv4 it was optional (a zero field means &ldquo;not computed&rdquo;); over IPv6 it became mandatory there too, because IPv6 dropped its own header checksum.</p>
     </div>
@@ -1687,7 +1687,7 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
   <div class="col sec-head">
     <span class="eyebrow">TCP under HTTP</span>
     <h2>Does every API call cost a handshake?</h2>
-    <p class="sec-sub">Your answer to this was essentially correct. Here it is with the numbers attached, plus four refinements worth having.</p>
+    <p class="sec-sub">The short answer is no. Here it is with the numbers attached, plus four details that matter in practice.</p>
   </div>
 
   <div class="col sec-body">
@@ -1775,7 +1775,7 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
   </div>
 
   <div class="col sec-body" style="margin-top:26px">
-    <h3>Four refinements to your list</h3>
+    <h3>Four details that matter in practice</h3>
     <div class="fix">
       <span class="tag">1 · HTTP/2 does not remove head-of-line blocking</span>
       <p>It removes it at the <em>HTTP</em> layer — one slow response no longer blocks the others. But all those streams still ride one TCP connection, and <strong>TCP delivers bytes strictly in order</strong>. Lose one segment and the kernel holds back <em>every</em> stream&rsquo;s data until the retransmission arrives, even streams whose bytes already made it. On a lossy link, HTTP/2 over TCP can be <em>slower</em> than HTTP/1.1 with six connections. Removing this is the entire reason HTTP/3 abandoned TCP: QUIC tracks loss per stream, so one lost packet stalls only its own stream.</p>
@@ -1786,11 +1786,11 @@ tcp_keepalive_probes = 9      <span class="cm"># give up after 9 → ~2h 11m to 
     </div>
     <div class="fix">
       <span class="tag">3 · Server-side limits also close connections</span>
-      <p>Your &ldquo;connection pooling limits&rdquo; point is right but usually server-driven. Nginx <span class="m">keepalive_requests</span> (default 1000) and <span class="m">keepalive_timeout</span> (75 s) will close the connection from the server side. AWS ALB idles out at 60 s by default — a classic source of intermittent 502s when the client&rsquo;s idle timeout is <em>longer</em> than the load balancer&rsquo;s and it reuses a connection the balancer has already closed. <strong>Always set your client&rsquo;s idle timeout shorter than the server&rsquo;s.</strong></p>
+      <p>Connection reuse is limited from the server side too. Nginx <span class="m">keepalive_requests</span> (default 1000) and <span class="m">keepalive_timeout</span> (75 s) will close the connection from the server side. AWS ALB idles out at 60 s by default — a classic source of intermittent 502s when the client&rsquo;s idle timeout is <em>longer</em> than the load balancer&rsquo;s and it reuses a connection the balancer has already closed. <strong>Always set your client&rsquo;s idle timeout shorter than the server&rsquo;s.</strong></p>
     </div>
     <div class="fix">
       <span class="tag">4 · The &ldquo;fresh client per request&rdquo; bug, by language</span>
-      <p>Your last point is the one that costs the most in real code, so here is what &ldquo;share a persistent client&rdquo; concretely means:</p>
+      <p>This is the mistake that costs the most in real code, so here is what &ldquo;share a persistent client&rdquo; concretely means:</p>
       <pre>Go       <b>one</b> http.Client / http.Transport, package-level  <span class="cm">— never per request</span>
 Python   requests.Session()  or  httpx.Client()             <span class="cm">— not requests.get()</span>
 Node     an Agent with keepAlive:true, or undici's Pool     <span class="cm">— fetch() defaults to keep-alive</span>
@@ -1877,39 +1877,31 @@ $ netstat -s | grep -A4 'Tcp:'   <span class="cm"># the portable equivalent</spa
   </div>
 </section>
 
-<!-- ══════════════════ NOTES REVIEW ══════════════════ -->
+<!-- ══════════════════ MISCONCEPTIONS ══════════════════ -->
 <section id="notes">
   <div class="col sec-head">
-    <span class="eyebrow">Your notes, reviewed</span>
-    <h2>What was right, and the six things that needed fixing</h2>
-    <p class="sec-sub">Line by line against your original notes. Most of it held up — the port ranges, the handshake, the data-offset arithmetic and the HTTP reasoning were all sound.</p>
+    <span class="eyebrow">Common misconceptions</span>
+    <h2>Twelve things people get wrong about TCP</h2>
+    <p class="sec-sub">Each of these shows up in textbooks, diagrams and interview answers. Some are plain errors; most are half-truths that hide the interesting part.</p>
   </div>
 
   <div style="margin-top:8px">
     <div class="tbl-scroll">
       <table>
-        <thead><tr><th style="min-width:230px">Your note</th><th style="min-width:120px">Verdict</th><th>Detail</th></tr></thead>
+        <thead><tr><th style="min-width:230px">Common belief</th><th style="min-width:120px">Verdict</th><th>What is actually true</th></tr></thead>
         <tbody>
-          <tr><td>TCP = Transmission Control Protocol; protocol means a set of rules</td><td><span class="chip ok">Correct</span></td><td>—</td></tr>
-          <tr><td>The application layer doesn&rsquo;t know about the layers below it</td><td><span class="chip">Nuance</span></td><td>True as an abstraction, but it leaks: <span class="m">TCP_NODELAY</span>, <span class="m">SO_RCVBUF</span>, and a blocking <code>send()</code> when the peer&rsquo;s window closes are all TCP showing through.</td></tr>
-          <tr><td>Three-way handshake to open</td><td><span class="chip ok">Correct</span></td><td>Three is the provable minimum: each side&rsquo;s ISN must be both sent and confirmed.</td></tr>
-          <tr><td>Four steps to close</td><td><span class="chip">Nuance</span></td><td>Correct, but the middle ACK and FIN are usually coalesced into one <span class="m">FIN, ACK</span> — three segments in most real traces. Also missing: TIME_WAIT, half-close, and RST.</td></tr>
-          <tr><td>TCP sends HEADER + DATA together</td><td><span class="chip">Nuance</span></td><td>True per segment — but TCP is a <strong>byte stream</strong>. Your <code>send()</code> boundaries do not survive, so &ldquo;one request = one segment&rdquo; is never guaranteed.</td></tr>
-          <tr><td>Header: Data offset (4) | reserved (3) | Flag | Window (16)</td><td><span class="chip d">Fixed</span></td><td>Now <strong>Data Offset (4) · Reserved (4) · Control Bits (8) · Window (16)</strong>. Your 3-bit version was RFC 3540&rsquo;s layout; RFC 8311 made the NS bit historic in 2018 and returned it to reserved.</td></tr>
-          <tr><td>16 bit = 65535 possible values</td><td><span class="chip d">Fixed</span></td><td>16 bits = <strong>65,536</strong> values, 0 through 65,535. For ports the usable count is 65,535 because port 0 is reserved — the right number, by a different route.</td></tr>
-          <tr><td>Well-known 0–1023, registered 1024–49151, dynamic 49152–65535, and the port list</td><td><span class="chip ok">Correct</span></td><td>All accurate, including every port number you listed. Worth adding: Linux&rsquo;s actual ephemeral range is 32768–60999, not IANA&rsquo;s.</td></tr>
-          <tr><td>Chrome &ldquo;does not use a port&rdquo; until it makes a request</td><td><span class="chip">Nuance</span></td><td>It doesn&rsquo;t <em>listen</em> on one. It still gets an ephemeral <em>source</em> port for every connection it opens — the four-tuple requires it.</td></tr>
-          <tr><td>The sender picks a random 32-bit sequence number</td><td><span class="chip">Nuance</span></td><td>Unpredictable, not random. RFC 6528: a 4&nbsp;µs timer plus a keyed hash of the four-tuple, so old segments can&rsquo;t be confused with new ones and outsiders can&rsquo;t guess it.</td></tr>
-          <tr><td>In the SYN, the acknowledgment number is all zeros</td><td><span class="chip ok">Correct</span></td><td>When the ACK flag is clear the field is ignored, and stacks send zero.</td></tr>
-          <tr><td>The final ACK: <span class="m">S-3000 → D-50123</span></td><td><span class="chip d">Fixed</span></td><td>The client sends segment 3, so the ports flip back: <strong><span class="m">S-50123 → D-3000</span></strong>. Your seq=1001 / ack=2001 were exactly right.</td></tr>
-          <tr><td>Data offset: 4 bits, min 5, max 15; header 20–60 bytes</td><td><span class="chip ok">Correct</span></td><td>Precisely right. The unit is 32-bit <em>words</em>, which is where the ×4 comes from.</td></tr>
-          <tr><td>Flags: SYN, ACK, FIN, RST, PSH, PSH, URG, ECE, CWR, NS</td><td><span class="chip d">Fixed</span></td><td>PSH appeared twice. There are eight live bits, in header order: <strong>CWR ECE URG ACK PSH RST SYN FIN</strong>. NS is historic since RFC 8311.</td></tr>
-          <tr><td>&ldquo;The destination port will say the window size&rdquo;</td><td><span class="chip d">Fixed</span></td><td>Not a property of a port or of one side — <strong>every segment carries its own sender&rsquo;s receive window</strong>, in both directions, continuously.</td></tr>
-          <tr><td>The source can send a window&rsquo;s worth of data without an ACK</td><td><span class="chip d">Fixed</span></td><td>Right for flow control, but that&rsquo;s only one of two limits. The real cap is <span class="m">min(rwnd, cwnd)</span> — and <strong>cwnd has no header field at all</strong>. Congestion control was the biggest gap in the notes.</td></tr>
-          <tr><td>Window is 16 bits max</td><td><span class="chip">Nuance</span></td><td>The <em>field</em> is. The <em>window</em> reaches 1 GiB via the Window Scale option — without which fast, long-distance links run at a fraction of their capacity.</td></tr>
-          <tr><td>Checksum uses ones&rsquo; complement</td><td><span class="chip ok">Correct</span></td><td>Worth adding that it also covers a 12-byte pseudo-header of IP fields that is never transmitted.</td></tr>
-          <tr><td>Options and padding</td><td><span class="chip ok">Correct</span></td><td>Padding exists to round the header up to a whole 32-bit word, so Data Offset stays valid.</td></tr>
-          <tr><td>The HTTP handshake-per-request analysis</td><td><span class="chip ok">Correct</span></td><td>Sound throughout. Four refinements added above — chiefly that HTTP/2 removes head-of-line blocking only at the HTTP layer, never at the TCP layer.</td></tr>
+          <tr><td>The application layer knows nothing about the layers below it</td><td><span class="chip">Half true</span></td><td>True as an abstraction, but it leaks: <span class="m">TCP_NODELAY</span>, <span class="m">SO_RCVBUF</span>, and a blocking <code>send()</code> when the peer&rsquo;s window closes are all TCP showing through.</td></tr>
+          <tr><td>Closing always takes four segments</td><td><span class="chip">Half true</span></td><td>Four is the logical count, but the middle ACK and FIN are usually coalesced into one <span class="m">FIN, ACK</span> — three segments in most real traces. And a RST closes in one.</td></tr>
+          <tr><td>One <code>send()</code> becomes one segment, and one segment becomes one <code>recv()</code></td><td><span class="chip d">Wrong</span></td><td>TCP is a <strong>byte stream</strong>. Write boundaries do not survive: the kernel merges and splits freely, so &ldquo;one request = one segment&rdquo; is never guaranteed.</td></tr>
+          <tr><td>The header has 3 reserved bits and an NS flag</td><td><span class="chip d">Outdated</span></td><td>That was RFC 3540&rsquo;s layout. RFC 8311 made NS historic in 2018, so the current row is <strong>Data Offset (4) · Reserved (4) · Control Bits (8) · Window (16)</strong>.</td></tr>
+          <tr><td>16 bits gives 65,535 possible values</td><td><span class="chip d">Wrong</span></td><td>16 bits = <strong>65,536</strong> values, 0 through 65,535. The usable port count is 65,535 only because port 0 is reserved.</td></tr>
+          <tr><td>A browser or mobile app &ldquo;does not use a port&rdquo;</td><td><span class="chip">Half true</span></td><td>It doesn&rsquo;t <em>listen</em> on one. It still gets an ephemeral <em>source</em> port for every connection it opens — the four-tuple requires it.</td></tr>
+          <tr><td>The initial sequence number is random</td><td><span class="chip">Half true</span></td><td>Unpredictable, not random. RFC 6528: a 4&nbsp;µs timer plus a keyed hash of the four-tuple, so old segments can&rsquo;t be confused with new ones and outsiders can&rsquo;t guess it.</td></tr>
+          <tr><td>Source and destination ports stay the same on every segment</td><td><span class="chip d">Wrong</span></td><td>They swap with direction. In the handshake, segments 1 and 3 go client→server with <span class="m">src 50123 → dst 3000</span>; segment 2 goes the other way with <span class="m">src 3000 → dst 50123</span>.</td></tr>
+          <tr><td>There are nine or ten flags, including NS</td><td><span class="chip d">Outdated</span></td><td>There are eight live bits, in header order: <strong>CWR ECE URG ACK PSH RST SYN FIN</strong>. NS is historic since RFC 8311.</td></tr>
+          <tr><td>The server tells the client the window size</td><td><span class="chip d">Wrong</span></td><td>The window is not a property of one side — <strong>every segment carries its own sender&rsquo;s receive window</strong>, in both directions, continuously.</td></tr>
+          <tr><td>The advertised window is the limit on data in flight</td><td><span class="chip d">Incomplete</span></td><td>That is only flow control. The real cap is <span class="m">min(rwnd, cwnd)</span> — and <strong>cwnd has no header field at all</strong>. Most real transfers are limited by cwnd, not by the advertised window.</td></tr>
+          <tr><td>The window can never exceed 65,535 bytes</td><td><span class="chip">Half true</span></td><td>The <em>field</em> is 16 bits. The <em>window</em> reaches 1 GiB via the Window Scale option — without which fast, long-distance links run at a fraction of their capacity.</td></tr>
         </tbody>
       </table>
     </div>
@@ -1917,8 +1909,8 @@ $ netstat -s | grep -A4 'Tcp:'   <span class="cm"># the portable equivalent</spa
 
   <div class="col sec-body" style="margin-top:24px">
     <div class="key">
-      <span class="tag">What to add next</span>
-      <p>Your notes covered the <em>structure</em> of TCP thoroughly. What they didn&rsquo;t cover is its <em>behaviour over time</em> — congestion control, retransmission timers, and TIME_WAIT. That is where nearly every real-world TCP problem actually lives: a slow API is almost never a header-layout question and almost always an RTO, a closed window, or a connection that should have been reused.</p>
+      <span class="tag">Where the real problems live</span>
+      <p>Most TCP explanations cover its <em>structure</em> thoroughly — the header, the handshake, the ports. What they tend to skip is its <em>behaviour over time</em>: congestion control, retransmission timers, and TIME_WAIT. That is where nearly every real-world TCP problem actually lives. A slow API is almost never a header-layout question and almost always an RTO, a closed window, or a connection that should have been reused.</p>
     </div>
   </div>
 </section>
@@ -1976,7 +1968,7 @@ $ netstat -s | grep -A4 'Tcp:'   <span class="cm"># the portable equivalent</spa
   </div>
 
   <div class="col foot">
-    <p><strong>TCP on the Wire</strong> — built from a set of study notes, corrected and expanded against RFC 9293 (the 2022 consolidation that obsoletes RFC 793), RFC 7323 (window scale, timestamps, PAWS), RFC 5681 (congestion control), RFC 6298 (RTO), RFC 2018 (SACK), RFC 6528 (ISN), RFC 6928 (initial window 10) and RFC 8311 (ECN experimentation, which retired the NS bit).</p>
+    <p><strong>TCP on the Wire</strong> — checked against RFC 9293 (the 2022 consolidation that obsoletes RFC 793), RFC 7323 (window scale, timestamps, PAWS), RFC 5681 (congestion control), RFC 6298 (RTO), RFC 2018 (SACK), RFC 6528 (ISN), RFC 6928 (initial window 10) and RFC 8311 (ECN experimentation, which retired the NS bit).</p>
     <p>Every packet in the Lab is a valid segment: the sequence arithmetic, the SACK blocks, the window scaling and the state transitions all check out against the specification.</p>
   </div>
 </section>
@@ -2050,7 +2042,7 @@ var TR = [
   why:'Fast retransmit. The third duplicate ACK arrived, so the server resends exactly the missing segment — SACK told it not to resend anything else. It also halves its congestion window and continues, without waiting for any timer.'},
 
  {t:53, d:'c2s', n:'ACK 8761', f:['ACK'], q:143, a:8761, L:0, w:251, ws:8, doff:8, o:TSOPT,
-  why:'The hole is filled, so the cumulative ACK leaps from 2921 all the way to 8761 in one step — acknowledging the retransmission and all four buffered segments at once. The application finally receives 5,840 contiguous bytes it has been waiting on.'},
+  why:'The hole is filled, so the cumulative ACK leaps from 2921 all the way to 8761 in one step — acknowledging the retransmission and the three buffered segments at once. The application finally receives 5,840 contiguous bytes it has been waiting on.'},
 
  {t:59, d:'s2c', n:'PSH, ACK · tail', f:['PSH','ACK'], q:8761, a:143, L:612, w:509, ws:7, doff:8, o:TSOPT, k:'data',
   why:'The last 612 bytes of the 9,372-byte response. PSH is set because the server’s send buffer is now empty — that is what actually triggers the flag in a modern stack.'},
@@ -2416,10 +2408,10 @@ var VERDICTS = {
  '':'Nothing set. Illegal on a live connection — every segment after the initial SYN must carry ACK. Scanners send these deliberately as a “null scan”: a closed port replies RST, an open one stays silent, which fingerprints the OS.',
  'SYN':'<b>Connection request — an active open.</b> The first segment of a connection, and the only one that may carry SYN without ACK. It proposes an ISN, carries the negotiable options, and consumes one sequence number.',
  'ACK,SYN':'<b>Connection accepted.</b> The second segment of the handshake, doing two jobs at once: acknowledging the peer’s ISN and proposing its own. This dual role is the reason the handshake needs three segments rather than four.',
- 'ACK':'<b>A plain acknowledgment.</b> By far the most common segment on the internet. It may carry payload or none at all; a pure ACK with no data is 20–52 bytes of pure overhead, which is exactly what delayed ACK exists to reduce.',
+ 'ACK':'<b>A plain acknowledgment.</b> By far the most common segment on the internet. It may carry payload or none at all; a pure ACK with no data is 40–52 bytes of IP and TCP headers carrying nothing, which is exactly what delayed ACK exists to reduce.',
  'ACK,PSH':'<b>Data, deliver it now.</b> The receiving kernel should hand this to the application rather than buffer for more. Modern stacks set PSH automatically on the last segment of a write burst, so it marks the end of a request or response body.',
  'ACK,FIN':'<b>Graceful close of one direction.</b> “I have no more data to send; you may keep sending.” Consumes one sequence number and must be acknowledged. This is a half-close, not a full teardown.',
- 'FIN':'A FIN without ACK. Legal only in the vanishingly rare case of a connection that never established. In practice a bare FIN on the wire is a <b>FIN scan</b> probing for open ports.',
+ 'FIN':'A FIN without ACK. No real stack sends this — every segment after the initial SYN carries ACK. A bare FIN on the wire is a <b>FIN scan</b> probing for open ports: a closed port answers RST, an open one stays silent.',
  'RST':'<b>Abort.</b> Tears the connection down immediately — no acknowledgment, no confirmation, queued data discarded. This is what you get from connecting to a closed port.',
  'ACK,RST':'<b>Reset in response to a segment.</b> The usual form when a segment arrives for a connection that does not exist — after a crash and restart, or when a firewall injects a reset to block traffic. Surfaces to the application as ECONNRESET.',
  'ACK,URG':'Urgent data on an established connection. Vanishingly rare in legitimate modern traffic; treat it as a red flag in a capture.',

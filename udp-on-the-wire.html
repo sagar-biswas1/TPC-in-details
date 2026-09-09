@@ -1,0 +1,1632 @@
+<title>UDP on the Wire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* ============================================================
+   UDP on the Wire — tokens
+   Companion to "TCP on the Wire": same neutrals, same type.
+   Here the accent axis encodes PROTOCOL, because this page is
+   an argument about the choice between two of them.
+     indigo = UDP · ochre = TCP · brick = lost · green = delivered
+   ============================================================ */
+:root{
+  --paper:#F4F6F8;
+  --surface:#FFFFFF;
+  --surface-2:#EAEEF2;
+  --surface-3:#DFE5EC;
+  --line:#CBD5DF;
+  --line-soft:#E2E8EF;
+  --ink:#16202B;
+  --ink-2:#455A6D;
+  --ink-3:#5C6E84;
+
+  --udp:#4A47A3;
+  --udp-soft:#EDECF8;
+  --udp-line:#B2AFE0;
+  --tcp:#B45309;
+  --tcp-soft:#FBF1E1;
+  --tcp-line:#E4C48D;
+
+  --lost:#B02A26;
+  --lost-soft:#FBEBE9;
+  --lost-line:#E8B4AF;
+  --ok:#2C7440;
+  --ok-soft:#E7F2E9;
+  --ok-line:#9CC8A8;
+
+  --shadow:0 1px 2px rgba(22,32,43,.05), 0 8px 24px -12px rgba(22,32,43,.18);
+  --measure:69ch;
+  --wide:1120px;
+  --r:6px;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1418; --surface:#141D23; --surface-2:#1B262D; --surface-3:#24333B;
+    --line:#2E3F49; --line-soft:#212E36;
+    --ink:#E3EBF1; --ink-2:#A3B5C1; --ink-3:#718696;
+    --udp:#9A96F0; --udp-soft:#1D1B3A; --udp-line:#3C3878;
+    --tcp:#EAA33F; --tcp-soft:#2B2113; --tcp-line:#6B4E1E;
+    --lost:#EC7367; --lost-soft:#2E1715; --lost-line:#68302B;
+    --ok:#66C67C; --ok-soft:#132A19; --ok-line:#265E36;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1418; --surface:#141D23; --surface-2:#1B262D; --surface-3:#24333B;
+  --line:#2E3F49; --line-soft:#212E36;
+  --ink:#E3EBF1; --ink-2:#A3B5C1; --ink-3:#718696;
+  --udp:#9A96F0; --udp-soft:#1D1B3A; --udp-line:#3C3878;
+  --tcp:#EAA33F; --tcp-soft:#2B2113; --tcp-line:#6B4E1E;
+  --lost:#EC7367; --lost-soft:#2E1715; --lost-line:#68302B;
+  --ok:#66C67C; --ok-soft:#132A19; --ok-line:#265E36;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper); color:var(--ink); font-family:var(--body);
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--udp-soft);color:var(--ink)}
+
+.wrap{max-width:var(--wide);margin:0 auto;padding:0 22px}
+.col{max-width:var(--measure);margin:0 auto}
+section{padding:0 0 12px}
+.sec-body{display:flex;flex-direction:column;gap:18px}
+
+h1,h2,h3,h4{font-family:var(--display);font-stretch:88%;margin:0;text-wrap:balance;letter-spacing:-.012em;line-height:1.12}
+h1{font-size:clamp(2.6rem,7.2vw,4.4rem);font-weight:800;letter-spacing:-.028em}
+h2{font-size:clamp(1.7rem,3.4vw,2.35rem);font-weight:700;letter-spacing:-.02em}
+h3{font-size:1.24rem;font-weight:700;letter-spacing:-.008em;font-stretch:92%}
+h4{font-size:1.02rem;font-weight:700;font-stretch:95%}
+p{margin:0}
+.lede{font-size:1.16rem;line-height:1.55;color:var(--ink-2)}
+strong{font-weight:700;color:var(--ink)}
+a{color:var(--ink);text-decoration-color:var(--udp);text-underline-offset:3px;text-decoration-thickness:1.5px}
+a:hover{color:var(--udp)}
+ul,ol{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:.42em}
+li::marker{color:var(--ink-3)}
+
+.eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.sec-head{display:flex;flex-direction:column;gap:8px;padding-top:64px;margin-bottom:22px}
+.sec-head .eyebrow{display:flex;align-items:center;gap:10px}
+.sec-head .eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+.sec-sub{color:var(--ink-2);font-size:1.04rem;max-width:60ch}
+
+code,kbd,.m{font-family:var(--mono);font-variant-ligatures:none}
+p code,li code,td code,.m{font-size:.86em;background:var(--surface-2);border:1px solid var(--line-soft);padding:.08em .34em;border-radius:4px;white-space:nowrap}
+
+.masthead{padding:54px 0 30px;border-bottom:1px solid var(--line)}
+.mast-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:34px;align-items:start}
+@media(min-width:940px){.mast-grid{grid-template-columns:minmax(0,1fr) 400px;gap:48px}}
+.mast-tag{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);border-radius:100px;padding:5px 13px}
+.mast-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--udp)}
+h1 .h1-sub{display:block;font-size:.34em;font-weight:600;font-stretch:100%;letter-spacing:.01em;color:var(--ink-3);margin-top:.5em;line-height:1.4}
+.mast-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.rfc{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:3px 8px;background:var(--surface)}
+
+.navbar{position:sticky;top:0;z-index:60;background:var(--paper);background:color-mix(in srgb, var(--paper) 88%, transparent);backdrop-filter:saturate(160%) blur(10px);-webkit-backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--line)}
+.navbar-inner{max-width:var(--wide);margin:0 auto;padding:0 22px;display:flex;align-items:center;gap:14px}
+.nav-mark{font-family:var(--display);font-stretch:82%;font-weight:800;font-size:.9rem;letter-spacing:.02em;white-space:nowrap;padding:11px 0}
+.nav-mark span{color:var(--udp)}
+.nav-scroll{overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex:1}
+.nav-scroll::-webkit-scrollbar{display:none}
+.nav-list{display:flex;gap:2px;padding:7px 0}
+.nav-list a{font-family:var(--mono);font-size:.71rem;font-weight:500;letter-spacing:.03em;color:var(--ink-3);text-decoration:none;padding:5px 9px;border-radius:5px;white-space:nowrap}
+.nav-list a:hover{color:var(--ink);background:var(--surface-2)}
+.nav-list a.on{color:var(--udp);background:var(--udp-soft)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.panel-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.panel-bar h4{font-size:.78rem;font-family:var(--mono);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.panel-body{padding:16px}
+.panel-foot{padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2);font-size:.82rem;color:var(--ink-2)}
+
+.note,.warn,.key{border:1px solid var(--line);border-left:3px solid var(--ink-3);background:var(--surface);border-radius:0 var(--r) var(--r) 0;padding:13px 16px;display:flex;flex-direction:column;gap:7px;font-size:.95rem}
+.note{border-left-color:var(--ok);background:var(--ok-soft)}
+.warn{border-left-color:var(--lost);background:var(--lost-soft)}
+.key{border-left-color:var(--udp);background:var(--udp-soft)}
+.note .tag,.warn .tag,.key .tag{font-family:var(--mono);font-size:.65rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.note .tag{color:var(--ok)}.warn .tag{color:var(--lost)}.key .tag{color:var(--udp)}
+
+.tbl-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+thead th{font-family:var(--mono);font-size:.67rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover{background:var(--surface-2)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:4px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.chip.u{background:var(--udp-soft);border-color:var(--udp-line);color:var(--udp)}
+.chip.t{background:var(--tcp-soft);border-color:var(--tcp-line);color:var(--tcp)}
+.chip.d{background:var(--lost-soft);border-color:var(--lost-line);color:var(--lost)}
+.chip.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok)}
+
+button{font-family:inherit;font-size:inherit;color:inherit}
+.btn{font-family:var(--mono);font-size:.74rem;font-weight:600;letter-spacing:.05em;padding:6px 12px;border-radius:5px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;transition:background .12s,color .12s}
+.btn:hover{background:var(--surface-2);color:var(--ink)}
+.btn.primary{background:var(--udp);border-color:var(--udp);color:#FFFFFF}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#131230}}
+:root[data-theme="dark"] .btn.primary{color:#131230}
+:focus-visible{outline:2px solid var(--udp);outline-offset:2px;border-radius:3px}
+.ctrl{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.7rem;color:var(--ink-3);letter-spacing:.05em}
+
+figure{margin:0;display:flex;flex-direction:column;gap:9px}
+figcaption{font-size:.85rem;color:var(--ink-3);line-height:1.5;max-width:64ch}
+.fig-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;overflow-x:auto}
+svg.diagram{display:block;max-width:100%;height:auto;color:var(--ink)}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media(min-width:760px){.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.grid3{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media(min-width:700px){.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:15px;display:flex;flex-direction:column;gap:7px}
+.card h4{font-size:.95rem}
+.card p{font-size:.9rem;color:var(--ink-2);line-height:1.55}
+pre{margin:0;min-width:0;font-family:var(--mono);font-size:.79rem;line-height:1.65;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;overflow-x:auto;color:var(--ink-2)}
+pre b{color:var(--ink);font-weight:600}
+pre .cm{color:var(--ink-3);font-style:italic}
+pre .u{color:var(--udp)}
+pre .t{color:var(--tcp)}
+@media(min-width:980px){
+  .sec-body>pre{margin-left:-92px;margin-right:-92px}
+  .col>.tbl-scroll{margin-left:-92px;margin-right:-92px}
+}
+.foot{border-top:1px solid var(--line);margin-top:70px;padding:30px 0 60px;color:var(--ink-3);font-size:.86rem;display:flex;flex-direction:column;gap:8px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}.fly{display:none}}
+</style>
+<style>
+/* ============================================================
+   Instruments
+   ============================================================ */
+
+/* ---- dual ladder: TCP beside UDP on one time axis ---- */
+.lab-scroll{position:relative;overflow:auto;height:498px;background:var(--surface);scroll-behavior:smooth}
+@media(prefers-reduced-motion:reduce){.lab-scroll{scroll-behavior:auto}}
+.lab-scroll svg{display:block;width:660px}
+.lad-line{stroke:var(--line);stroke-width:1.5}
+.lad-div{stroke:var(--line);stroke-width:1.5;stroke-dasharray:2 5}
+.lad-host{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.07em;fill:var(--ink-3);text-transform:uppercase}
+.lad-proto{font-family:var(--display);font-stretch:88%;font-size:14px;font-weight:700;letter-spacing:.02em}
+.lad-proto.t{fill:var(--tcp)}
+.lad-proto.u{fill:var(--udp)}
+.lad-tick{font-family:var(--mono);font-size:9.5px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.lad-tickline{stroke:var(--line-soft);stroke-width:1}
+.pk .wire{stroke-width:1.7;fill:none;stroke-linecap:round}
+.pk.t .wire{stroke:var(--tcp)}
+.pk.u .wire{stroke:var(--udp)}
+.pk.ctl .wire{stroke:var(--ink-3);stroke-width:1.3}
+.pk.lost .wire{stroke:var(--lost);stroke-dasharray:4 3}
+.pk .head{stroke:none}
+.pk.t .head{fill:var(--tcp)}
+.pk.u .head{fill:var(--udp)}
+.pk.ctl .head{fill:var(--ink-3)}
+.pk.lost .head{fill:var(--lost)}
+.pk .lbl{font-family:var(--mono);font-size:10px;font-weight:600;paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
+.pk.t .lbl{fill:var(--tcp)}
+.pk.u .lbl{fill:var(--udp)}
+.pk.ctl .lbl{fill:var(--ink-3);font-weight:400}
+.pk.lost .lbl{fill:var(--lost)}
+.lad-x{stroke:var(--lost);stroke-width:2;stroke-linecap:round}
+.deliv rect{fill:var(--ok);stroke:none}
+.deliv text{font-family:var(--mono);font-size:9px;font-weight:600;fill:var(--surface)}
+.deliv.hold rect{fill:none;stroke:var(--ink-3);stroke-width:1.2;stroke-dasharray:3 2}
+.deliv.hold text{fill:var(--ink-3)}
+.lad-ann{font-family:var(--body);font-size:10.5px;font-style:italic;fill:var(--ink-3)}
+.lad-ann.bad{fill:var(--lost)}
+
+/* delivery scoreboard */
+.score{display:grid;grid-template-columns:minmax(0,1fr);gap:0;border-bottom:1px solid var(--line);background:var(--surface-2)}
+@media(min-width:640px){.score{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.score-cell{padding:11px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.score-cell + .score-cell{border-left:1px solid var(--line)}
+@media(max-width:639px){.score-cell + .score-cell{border-left:0;border-top:1px solid var(--line)}}
+.score-cell .who{font-family:var(--mono);font-size:.66rem;letter-spacing:.13em;text-transform:uppercase;font-weight:600}
+.score-cell.t .who{color:var(--tcp)}
+.score-cell.u .who{color:var(--udp)}
+.msgs{display:flex;gap:4px;flex-wrap:wrap}
+.msg{
+  width:30px;height:30px;border-radius:4px;border:1px solid var(--line);background:var(--surface);
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.72rem;
+  font-weight:600;color:var(--ink-3);position:relative;transition:background .2s,color .2s,border-color .2s;
+}
+.msg.arrived{border-color:var(--ink-3);border-style:dashed;color:var(--ink-2)}
+.msg.done{background:var(--ok);border-color:var(--ok);color:#fff}
+:root[data-theme="dark"] .msg.done{color:#0B1C11}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .msg.done{color:#0B1C11}}
+.msg.gone{background:var(--lost-soft);border-color:var(--lost);color:var(--lost);text-decoration:line-through}
+.score-sum{font-family:var(--mono);font-size:.74rem;color:var(--ink-2);line-height:1.5}
+.score-sum b{color:var(--ink)}
+
+/* ---- hex dump explorer ---- */
+.hexwrap{overflow-x:auto}
+.hex{font-family:var(--mono);font-size:.8rem;line-height:1.9;min-width:520px;padding:14px;display:flex;flex-direction:column;gap:0}
+.hexrow{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.hexoff{color:var(--ink-3);font-size:.72rem;width:44px;flex:none;text-align:right}
+.hexb{
+  display:inline-block;width:24px;text-align:center;border-radius:3px;cursor:pointer;
+  border:1px solid transparent;color:var(--ink-2);transition:background .1s;
+}
+.hexb:hover{background:var(--surface-2);color:var(--ink)}
+.hexb.on{background:var(--udp);border-color:var(--udp);color:#fff;font-weight:600}
+:root[data-theme="dark"] .hexb.on{color:#131230}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .hexb.on{color:#131230}}
+.hexb.hdr{background:var(--udp-soft);color:var(--udp)}
+.hexb.hdr.on{background:var(--udp);color:#fff}
+.hexasc{color:var(--ink-3);font-size:.74rem;margin-left:8px;letter-spacing:.09em}
+.hexlegend{display:flex;flex-wrap:wrap;gap:5px;padding:0 14px 12px}
+.hexlegend button{
+  font-family:var(--mono);font-size:.66rem;font-weight:500;padding:3px 8px;border-radius:4px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-3);cursor:pointer;
+}
+.hexlegend button:hover{background:var(--surface-2);color:var(--ink)}
+.hexlegend button.on{background:var(--udp-soft);border-color:var(--udp);color:var(--udp);font-weight:600}
+.hexdetail{border-top:1px solid var(--line);padding:15px;background:var(--surface-2);display:flex;flex-direction:column;gap:9px}
+.hexdetail h4{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.hexdetail .off{font-family:var(--mono);font-size:.68rem;font-weight:500;color:var(--ink-3);letter-spacing:.06em}
+.hexdetail .val{font-family:var(--mono);font-size:.86rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:7px 11px;align-self:flex-start}
+.hexdetail p{font-size:.92rem;color:var(--ink-2);line-height:1.55;max-width:70ch}
+
+/* ---- checksum lab ---- */
+.cksum-out{font-family:var(--mono);font-size:.82rem;display:flex;flex-direction:column;gap:5px}
+.cksum-out .line{display:flex;gap:10px;flex-wrap:wrap}
+.cksum-out .k{color:var(--ink-3);min-width:150px}
+.cksum-out .v{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.verdict-ok{color:var(--ok);font-weight:600}
+.verdict-bad{color:var(--lost);font-weight:600}
+
+/* ---- amplification chart ---- */
+.amp-bar{fill:var(--udp)}
+.amp-bar.hi{fill:var(--lost)}
+.amp-lbl{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)}
+.amp-val{font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--ink)}
+.amp-ax{stroke:var(--line);stroke-width:1.4}
+.amp-grid{stroke:var(--line-soft);stroke-width:1}
+.amp-t{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+
+/* ---- boundary demo ---- */
+.bd{display:flex;gap:5px;align-items:stretch}
+.bd .blk{
+  border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.72rem;font-weight:600;padding:11px 6px;text-align:center;min-width:0;
+}
+.bd .blk.u{background:var(--udp-soft);border:1px solid var(--udp);color:var(--udp)}
+.bd .blk.t{background:var(--tcp-soft);border:1px solid var(--tcp);color:var(--tcp)}
+.bd-row{display:flex;flex-direction:column;gap:7px}
+.bd-row .cap{font-family:var(--mono);font-size:.66rem;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3)}
+</style>
+<nav class="navbar" aria-label="Sections">
+  <div class="navbar-inner">
+    <div class="nav-mark">UDP<span>/</span>WIRE</div>
+    <div class="nav-scroll">
+      <div class="nav-list">
+        <a href="#above">Above IP</a>
+        <a href="#header">Header</a>
+        <a href="#boundaries">Boundaries</a>
+        <a href="#lab">The Lab</a>
+        <a href="#checksum">Checksum</a>
+        <a href="#size">Size &amp; fragments</a>
+        <a href="#brakes">No brakes</a>
+        <a href="#connect">connect()</a>
+        <a href="#users">Who uses it</a>
+        <a href="#multicast">Multicast</a>
+        <a href="#amp">Amplification</a>
+        <a href="#reliable">Reliability on top</a>
+        <a href="#choose">Choosing</a>
+        <a href="#seeit">See it</a>
+        <a href="#card">Cheat sheet</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-grid">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div><span class="mast-tag"><i class="dot"></i>User Datagram Protocol</span></div>
+        <h1>UDP on the Wire<span class="h1-sub">Eight bytes of header, no handshake, no memory, no promises — and most of the internet&rsquo;s hardest-working traffic.</span></h1>
+        <p class="lede">TCP spends a round trip asking permission and then guarantees delivery. UDP does neither. Understanding UDP is mostly understanding what it deliberately <em>refuses</em> to do for you — and what you therefore have to build yourself.</p>
+        <div class="mast-meta">
+          <span class="rfc">RFC 768 — the whole spec, 3 pages</span>
+          <span class="rfc">RFC 1122 — host requirements</span>
+          <span class="rfc">RFC 8085 — usage guidelines</span>
+          <span class="rfc">RFC 9000 — QUIC</span>
+        </div>
+      </div>
+
+      <figure>
+        <div class="fig-box" style="padding:10px">
+          <svg class="diagram" viewBox="0 0 400 268" role="img" aria-label="Five datagrams fired from client to server with no handshake. Four arrive, one is lost with no retry, and two arrive in a different order than they were sent.">
+            <text class="lad-host" x="56" y="14" text-anchor="middle">SENDER</text>
+            <text class="lad-host" x="344" y="14" text-anchor="middle">RECEIVER</text>
+            <line class="lad-line" x1="56" y1="24" x2="56" y2="216"/>
+            <line class="lad-line" x1="344" y1="24" x2="344" y2="216"/>
+
+            <g class="pk u">
+              <line class="wire" x1="60" y1="48" x2="336" y2="78"/>
+              <polygon class="head" points="340,79 327,72 328,82"/>
+              <text class="lbl" x="96" y="44">1</text>
+              <circle class="fly" r="4" fill="currentColor" opacity="0" style="color:var(--udp)">
+                <animate attributeName="cx" values="60;336" dur="0.9s" begin="0s;u.end+0.6s"/>
+                <animate attributeName="cy" values="48;78" dur="0.9s" begin="0s;u.end+0.6s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="0.9s" begin="0s;u.end+0.6s"/>
+              </circle>
+            </g>
+            <g class="pk u">
+              <line class="wire" x1="60" y1="72" x2="336" y2="102"/>
+              <polygon class="head" points="340,103 327,96 328,106"/>
+              <text class="lbl" x="96" y="68">2</text>
+              <circle class="fly" r="4" fill="currentColor" opacity="0" style="color:var(--udp)">
+                <animate attributeName="cx" values="60;336" dur="0.9s" begin="0.25s;u.end+0.85s"/>
+                <animate attributeName="cy" values="72;102" dur="0.9s" begin="0.25s;u.end+0.85s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="0.9s" begin="0.25s;u.end+0.85s"/>
+              </circle>
+            </g>
+            <g class="pk u lost">
+              <line class="wire" x1="60" y1="96" x2="204" y2="112"/>
+              <text class="lbl" x="96" y="92">3</text>
+              <line class="lad-x" x1="199" y1="106" x2="211" y2="118"/>
+              <line class="lad-x" x1="211" y1="106" x2="199" y2="118"/>
+              <circle class="fly" r="4" fill="currentColor" opacity="0" style="color:var(--lost)">
+                <animate attributeName="cx" values="60;204" dur="0.45s" begin="0.5s;u.end+1.1s"/>
+                <animate attributeName="cy" values="96;112" dur="0.45s" begin="0.5s;u.end+1.1s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="0.45s" begin="0.5s;u.end+1.1s"/>
+              </circle>
+            </g>
+            <g class="pk u">
+              <line class="wire" x1="60" y1="120" x2="336" y2="200"/>
+              <polygon class="head" points="340,201 326,195 327,205"/>
+              <text class="lbl" x="96" y="116">4</text>
+              <circle class="fly" r="4" fill="currentColor" opacity="0" style="color:var(--udp)">
+                <animate attributeName="cx" values="60;336" dur="1.6s" begin="0.75s;u.end+1.35s"/>
+                <animate attributeName="cy" values="120;200" dur="1.6s" begin="0.75s;u.end+1.35s"/>
+                <animate id="u" attributeName="opacity" values="0;1;1;0" dur="1.6s" begin="0.75s;u.end+1.35s"/>
+              </circle>
+            </g>
+            <g class="pk u">
+              <line class="wire" x1="60" y1="144" x2="336" y2="174"/>
+              <polygon class="head" points="340,175 327,168 328,178"/>
+              <text class="lbl" x="96" y="140">5</text>
+              <circle class="fly" r="4" fill="currentColor" opacity="0" style="color:var(--udp)">
+                <animate attributeName="cx" values="60;336" dur="0.7s" begin="1s;u.end+1.6s"/>
+                <animate attributeName="cy" values="144;174" dur="0.7s" begin="1s;u.end+1.6s"/>
+                <animate attributeName="opacity" values="0;1;1;0" dur="0.7s" begin="1s;u.end+1.6s"/>
+              </circle>
+            </g>
+
+            <text class="lad-ann bad" x="216" y="128">lost — nobody retries</text>
+            <text class="lad-ann" x="336" y="216" text-anchor="end">5 arrives before 4</text>
+
+            <text x="12" y="242" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--udp)">4 delivered · 1 lost · 1 out of order</text>
+            <text x="12" y="258" style="font-family:var(--body);font-size:11.5px;fill:var(--ink-2)">and not one round trip spent on setup. That is the entire trade.</text>
+          </svg>
+        </div>
+        <figcaption>UDP&rsquo;s complete behavioural contract, in one picture: datagrams go out immediately, and whatever happens to them next is your problem.</figcaption>
+      </figure>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ══════════════════ ABOVE IP ══════════════════ -->
+<section id="above">
+  <div class="col sec-head">
+    <span class="eyebrow">What UDP actually is</span>
+    <h2>A thin shim over IP that adds exactly two things</h2>
+    <p class="sec-sub">RFC 768 is three pages long. That is not a summary — that is the whole specification, published in 1980 and never revised.</p>
+  </div>
+  <div class="col sec-body">
+    <p>IP can already get a packet from one host to another. What it cannot do is say <em>which program</em> on that host the packet is for, and it cannot tell you whether the payload arrived intact. UDP adds those two things and stops:</p>
+    <ol>
+      <li><strong>Ports</strong> — 16 bits each way, so the kernel can demultiplex one machine&rsquo;s inbound packets to the right socket.</li>
+      <li><strong>A checksum</strong> — optional over IPv4, mandatory over IPv6, covering the header, the payload and a pseudo-header of IP fields.</li>
+    </ol>
+    <p>That is the complete feature list. Everything people find surprising about UDP follows from what is <em>absent</em>:</p>
+  </div>
+
+  <div class="col" style="margin-top:16px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Property</th><th>TCP</th><th>UDP</th><th>What it costs you</th></tr></thead>
+        <tbody>
+          <tr><td>Connection setup</td><td class="n" style="color:var(--tcp)">3-way handshake</td><td class="n" style="color:var(--udp)">none</td><td>UDP&rsquo;s first byte of data leaves immediately — a full round trip saved</td></tr>
+          <tr><td>Delivery guarantee</td><td class="n" style="color:var(--tcp)">yes, retransmits</td><td class="n" style="color:var(--udp)">none</td><td>a lost datagram is gone silently and permanently</td></tr>
+          <tr><td>Ordering</td><td class="n" style="color:var(--tcp)">strict byte order</td><td class="n" style="color:var(--udp)">none</td><td>datagram 5 can arrive before datagram 4</td></tr>
+          <tr><td>Duplicate suppression</td><td class="n" style="color:var(--tcp)">yes</td><td class="n" style="color:var(--udp)">none</td><td>the same datagram can be delivered twice</td></tr>
+          <tr><td>Flow control</td><td class="n" style="color:var(--tcp)">sliding window</td><td class="n" style="color:var(--udp)">none</td><td>overrun the receiver&rsquo;s buffer and the kernel simply drops</td></tr>
+          <tr><td>Congestion control</td><td class="n" style="color:var(--tcp)">cwnd, AIMD</td><td class="n" style="color:var(--udp)">none</td><td>your app can melt a link and will never notice</td></tr>
+          <tr><td>Message boundaries</td><td class="n" style="color:var(--tcp)">destroyed</td><td class="n" style="color:var(--ok)"><strong>preserved</strong></td><td>the one thing UDP does <em>better</em>, not just less</td></tr>
+          <tr><td>Connection state</td><td class="n" style="color:var(--tcp)">~1–4 KB / conn</td><td class="n" style="color:var(--udp)">none</td><td>one socket can serve millions of peers</td></tr>
+          <tr><td>Header size</td><td class="n" style="color:var(--tcp)">20–60 B</td><td class="n" style="color:var(--udp)">8 B</td><td>matters enormously on tiny payloads</td></tr>
+          <tr><td>Multicast / broadcast</td><td class="n" style="color:var(--tcp)">impossible</td><td class="n" style="color:var(--ok)"><strong>supported</strong></td><td>one send, many receivers</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <figure style="margin-top:26px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 830 244" role="img" aria-label="Header overhead drawn to scale. Carrying a 20-byte voice sample, UDP adds 8 bytes of header for 29 percent overhead, while TCP adds at least 20 bytes for 50 percent overhead.">
+        <text class="lad-host" x="14" y="34">UDP</text>
+        <text class="lad-tick" x="14" y="48">8 B</text>
+        <rect x="90" y="20" width="72" height="34" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.5"/>
+        <text x="126" y="42" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--udp)">UDP 8</text>
+        <rect x="162" y="20" width="180" height="34" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="252" y="42" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)">voice sample — 20 B</text>
+        <text x="356" y="42" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--udp)">29% overhead</text>
+
+        <text class="lad-host" x="14" y="98">TCP</text>
+        <text class="lad-tick" x="14" y="112">20–60 B</text>
+        <rect x="90" y="84" width="180" height="34" rx="3" fill="var(--tcp-soft)" stroke="var(--tcp)" stroke-width="1.5"/>
+        <text x="180" y="106" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;font-weight:600;fill:var(--tcp)">TCP 20 minimum</text>
+        <rect x="270" y="84" width="180" height="34" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="360" y="106" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)">voice sample — 20 B</text>
+        <rect x="450" y="84" width="360" height="34" rx="3" fill="var(--tcp-soft)" stroke="var(--tcp)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <text x="630" y="106" text-anchor="middle" style="font-family:var(--mono);font-size:10.5px;fill:var(--tcp)">+ up to 40 B of options</text>
+        <text x="464" y="136" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--tcp)">50% overhead, before options</text>
+
+        <line class="amp-grid" x1="90" y1="158" x2="810" y2="158"/>
+        <text x="14" y="184" style="font-family:var(--body);font-size:12px;fill:var(--ink-2)">A voice codec emits a 20-byte frame every 20 ms. Fifty of those per second, per call.</text>
+        <text x="14" y="204" style="font-family:var(--body);font-size:12px;fill:var(--ink-2)">Across ten thousand concurrent calls the header choice alone is the difference between</text>
+        <text x="14" y="224" style="font-family:var(--body);font-size:12px;font-weight:600;fill:var(--ink)">112 Mbit/s and 160 Mbit/s of headers alone (IP plus transport) — and TCP would still be the wrong answer.</text>
+      </svg>
+    </div>
+    <figcaption>Header cost is not a rounding error when payloads are tiny. It is the reason real-time voice, telemetry and DNS were never going to run on TCP.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <div class="key">
+      <span class="tag">The reframe that makes UDP click</span>
+      <p>UDP is not &ldquo;TCP with the safety off.&rdquo; It is <strong>raw IP that you are allowed to address to a program</strong>. Think of it as the unopinionated floor of the transport layer: whatever guarantees your application needs, you build on top — and you build <em>only</em> the ones you need. That is why QUIC, the transport under HTTP/3, is built on UDP rather than on TCP. It was cheaper to rebuild reliability from nothing than to work around TCP&rsquo;s decisions.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<section id="header">
+  <div class="col sec-head">
+    <span class="eyebrow">Anatomy</span>
+    <h2>Four fields, eight bytes, and nothing else</h2>
+    <p class="sec-sub">TCP&rsquo;s header has ten fields and a 40-byte options area. UDP&rsquo;s has four fields and no options. There is nowhere to put a sequence number, an acknowledgment, a window, or a flag — which is precisely why it cannot offer reliability.</p>
+  </div>
+
+  <figure>
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 830 200" role="img" aria-label="The UDP header: source port and destination port each 16 bits on the first 32-bit word, length and checksum each 16 bits on the second. Eight bytes total.">
+        <text class="amp-t" x="40" y="24">bit 0</text>
+        <text class="amp-t" x="410" y="24" text-anchor="end">15</text>
+        <text class="amp-t" x="424" y="24">16</text>
+        <text class="amp-t" x="800" y="24" text-anchor="end">31</text>
+        <line class="amp-grid" x1="40" y1="30" x2="800" y2="30"/>
+
+        <text class="amp-t" x="32" y="62" text-anchor="end">byte 0</text>
+        <rect x="40" y="38" width="378" height="42" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.5"/>
+        <text x="229" y="58" text-anchor="middle" style="font-family:var(--mono);font-size:12px;font-weight:600;fill:var(--udp)">Source Port</text>
+        <text x="229" y="72" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--udp)">16 bits · may be 0 if no reply is expected</text>
+        <rect x="422" y="38" width="378" height="42" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.5"/>
+        <text x="611" y="58" text-anchor="middle" style="font-family:var(--mono);font-size:12px;font-weight:600;fill:var(--udp)">Destination Port</text>
+        <text x="611" y="72" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--udp)">16 bits · which socket receives this</text>
+
+        <text class="amp-t" x="32" y="106" text-anchor="end">byte 4</text>
+        <rect x="40" y="82" width="378" height="42" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="229" y="102" text-anchor="middle" style="font-family:var(--mono);font-size:12px;font-weight:600;fill:var(--ink)">Length</text>
+        <text x="229" y="116" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">16 bits · header + payload, minimum 8</text>
+        <rect x="422" y="82" width="378" height="42" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="611" y="102" text-anchor="middle" style="font-family:var(--mono);font-size:12px;font-weight:600;fill:var(--ink)">Checksum</text>
+        <text x="611" y="116" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">16 bits · optional on IPv4, required on IPv6</text>
+
+        <rect x="40" y="128" width="760" height="34" rx="3" fill="var(--surface)" stroke="var(--line)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="420" y="149" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:var(--ink-3)">payload — 0 to 65,507 bytes</text>
+
+        <path d="M40 172 L40 180 L800 180 L800 172" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".4"/>
+        <text x="420" y="196" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ink-2)">the header is 8 bytes and never any other size</text>
+      </svg>
+    </div>
+    <figcaption>No sequence number. No acknowledgment number. No flags, no window, no options, no data offset — the header is a fixed size, so none is needed. Everything TCP uses to build reliability is simply absent.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>A real datagram, byte by byte</h3>
+    <p>This is an actual DNS query for <span class="m">example.com</span> — the single most common thing UDP carries. Click any byte to see which field it belongs to and what it decodes to.</p>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-bar">
+      <h4>udp · 192.0.2.10:54321 → 198.51.100.53:53</h4>
+      <span class="chip u">37 bytes</span>
+      <span style="flex:1"></span>
+      <span class="ctrl">click a byte</span>
+    </div>
+    <div class="hexwrap"><div class="hex" id="hexDump"></div></div>
+    <div class="hexlegend" id="hexLegend"></div>
+    <div class="hexdetail" id="hexDetail"></div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <div class="note">
+      <span class="tag">Source port 0 is legal here</span>
+      <p>Unlike TCP, UDP explicitly permits a <strong>source port of zero</strong>, meaning &ldquo;no reply is expected — do not send one.&rdquo; It is rare in practice (most stacks assign a real ephemeral port anyway, and many firewalls drop port-0 traffic as malformed), but it is in RFC 768 and it tells you something about the protocol&rsquo;s mindset: a UDP send is not a request. It is an announcement.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ BOUNDARIES ══════════════════ -->
+<section id="boundaries">
+  <div class="col sec-head">
+    <span class="eyebrow">The thing UDP does better</span>
+    <h2>Message boundaries survive</h2>
+    <p class="sec-sub">Almost every comparison frames UDP as TCP minus features. This is the one place the direction reverses — and it is why some applications choose UDP even on a perfectly reliable network.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>TCP is a <strong>byte stream</strong>: it may merge your writes or split them, and the receiver has no idea where one message ended and the next began. UDP is a <strong>datagram</strong> protocol: one <code>send()</code> produces exactly one datagram, and one <code>recv()</code> returns exactly one datagram, whole.</p>
+  </div>
+
+  <figure style="margin-top:20px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 830 302" role="img" aria-label="Three application writes of 700, 400 and 900 bytes. Over UDP the receiver gets three reads of exactly 700, 400 and 900 bytes. Over TCP the same writes are repacketized into 1460 and 540 bytes and the receiver gets two reads of the wrong sizes.">
+        <defs>
+          <marker id="dn3" markerWidth="9" markerHeight="9" refX="4.5" refY="7" orient="auto"><polygon points="0,0 9,0 4.5,8" fill="currentColor"/></marker>
+        </defs>
+
+        <text class="lad-proto u" x="14" y="46">UDP</text>
+        <text class="amp-t" x="14" y="62">datagram</text>
+        <text class="amp-t" x="150" y="26">app writes</text>
+        <rect x="150" y="32" width="175" height="30" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.4"/>
+        <text x="237" y="52" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--udp)">send 700 B</text>
+        <rect x="331" y="32" width="100" height="30" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.4"/>
+        <text x="381" y="52" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--udp)">send 400</text>
+        <rect x="437" y="32" width="225" height="30" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.4"/>
+        <text x="549" y="52" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--udp)">send 900 B</text>
+
+        <line x1="237" y1="66" x2="237" y2="84" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn3)" opacity=".4"/>
+        <line x1="381" y1="66" x2="381" y2="84" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn3)" opacity=".4"/>
+        <line x1="549" y1="66" x2="549" y2="84" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn3)" opacity=".4"/>
+
+        <text class="amp-t" x="150" y="106">app reads</text>
+        <rect x="150" y="90" width="175" height="30" rx="3" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.4"/>
+        <text x="237" y="110" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--ok)">recv 700 B</text>
+        <rect x="331" y="90" width="100" height="30" rx="3" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.4"/>
+        <text x="381" y="110" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--ok)">recv 400</text>
+        <rect x="437" y="90" width="225" height="30" rx="3" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.4"/>
+        <text x="549" y="110" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--ok)">recv 900 B</text>
+        <text x="676" y="110" style="font-family:var(--body);font-size:11.5px;font-weight:600;fill:var(--ok)">3 → 3, exact</text>
+
+        <line class="amp-grid" x1="14" y1="146" x2="816" y2="146"/>
+
+        <text class="lad-proto t" x="14" y="192">TCP</text>
+        <text class="amp-t" x="14" y="208">byte stream</text>
+        <text class="amp-t" x="150" y="172">app writes</text>
+        <rect x="150" y="178" width="175" height="30" rx="3" fill="var(--tcp-soft)" stroke="var(--tcp)" stroke-width="1.4"/>
+        <text x="237" y="198" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--tcp)">send 700 B</text>
+        <rect x="331" y="178" width="100" height="30" rx="3" fill="var(--tcp-soft)" stroke="var(--tcp)" stroke-width="1.4"/>
+        <text x="381" y="198" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--tcp)">send 400</text>
+        <rect x="437" y="178" width="225" height="30" rx="3" fill="var(--tcp-soft)" stroke="var(--tcp)" stroke-width="1.4"/>
+        <text x="549" y="198" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--tcp)">send 900 B</text>
+
+        <line x1="406" y1="212" x2="406" y2="230" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn3)" opacity=".4"/>
+        <text x="418" y="226" style="font-family:var(--body);font-size:10.5px;font-style:italic;fill:var(--ink-3)">merged, then cut at the MSS</text>
+
+        <text class="amp-t" x="150" y="252">app reads</text>
+        <rect x="150" y="236" width="365" height="30" rx="3" fill="var(--lost-soft)" stroke="var(--lost)" stroke-width="1.4"/>
+        <text x="332" y="256" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--lost)">recv 1460 B</text>
+        <rect x="521" y="236" width="141" height="30" rx="3" fill="var(--lost-soft)" stroke="var(--lost)" stroke-width="1.4"/>
+        <text x="591" y="256" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--lost)">recv 540</text>
+        <text x="676" y="256" style="font-family:var(--body);font-size:11.5px;font-weight:600;fill:var(--lost)">3 → 2, wrong</text>
+
+        <line x1="325" y1="272" x2="325" y2="284" stroke="var(--lost)" stroke-width="1.5"/>
+        <line x1="431" y1="272" x2="431" y2="284" stroke="var(--lost)" stroke-width="1.5"/>
+        <text x="150" y="296" style="font-family:var(--body);font-size:11.5px;fill:var(--ink-2)">the original boundaries — nowhere to be found</text>
+      </svg>
+    </div>
+    <figcaption>Every protocol built on TCP has to re-invent framing: HTTP uses <span class="m">Content-Length</span>, gRPC prefixes a 5-byte length, Redis terminates with <span class="m">\r\n</span>. On UDP that work is already done, for free, by the transport.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>All or nothing</h3>
+    <p>The boundary guarantee comes with a second, stronger one: <strong>a datagram is delivered whole or not at all</strong>. There is no such thing as receiving half a UDP datagram. If any IP fragment of it is lost, the whole datagram is discarded and your <code>recvfrom()</code> never sees it.</p>
+    <p>This is exactly the property DNS wants. A resolver that received 40 bytes of a 60-byte response would have to detect and discard it anyway. UDP does that for free — and if nothing arrives within the timeout, the resolver just asks again.</p>
+    <div class="warn">
+      <span class="tag">The gotcha this creates</span>
+      <p>Because a datagram is atomic, <strong>your receive buffer must be big enough for the whole thing</strong>. Call <code>recvfrom()</code> with a 512-byte buffer when a 900-byte datagram arrives and, on Linux, you get 512 bytes and <strong>the remaining 388 are discarded silently</strong> — the rest of the datagram is gone, not queued for the next read. Always size the buffer to your protocol&rsquo;s maximum, or pass <span class="m">MSG_TRUNC</span> so the return value tells you the true length and you can detect the truncation.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ THE LAB ══════════════════ -->
+<section id="lab">
+  <div class="col sec-head">
+    <span class="eyebrow">The Lab</span>
+    <h2>Same six messages, same lossy link, two protocols</h2>
+    <p class="sec-sub">One shared time axis. An application on the left wants to send six small messages. The network drops the third one in both runs, and delays one of the UDP datagrams. Press <strong>Play</strong> and watch what each protocol does about it.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-bar">
+      <h4>side by side · one loss, one reorder</h4>
+      <button class="btn primary" id="labPlay">▶&nbsp; Play</button>
+      <button class="btn" id="labStep">Step ▸</button>
+      <button class="btn" id="labReset">Reset</button>
+      <span class="ctrl">Speed <input type="range" id="labSpeed" min="1" max="12" value="6" aria-label="Playback speed" style="width:82px"></span>
+      <span style="flex:1"></span>
+      <span class="chip" id="labClock">t = 44</span>
+    </div>
+
+    <div class="score">
+      <div class="score-cell t">
+        <span class="who">TCP · delivered to the application</span>
+        <div class="msgs" id="scoreT"></div>
+        <p class="score-sum" id="sumT"></p>
+      </div>
+      <div class="score-cell u">
+        <span class="who">UDP · delivered to the application</span>
+        <div class="msgs" id="scoreU"></div>
+        <p class="score-sum" id="sumU"></p>
+      </div>
+    </div>
+
+    <div class="lab-scroll" id="labScroll">
+      <svg id="dualLad" role="img" aria-label="Two sequence diagrams on a shared time axis. TCP spends a three-way handshake before sending, retransmits the lost message after three duplicate acknowledgments, and delivers messages four, five and six only after the gap is filled at time 40. UDP sends immediately, delivers four messages by time 16, never recovers the lost one, and delivers message five after message six."></svg>
+    </div>
+
+    <div class="panel-foot">
+      A dashed outline on the scoreboard means the bytes have <strong>arrived at the receiving machine</strong> but the kernel will not hand them to the application yet. That gap — arrived but undeliverable — is head-of-line blocking, and only TCP has it.
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <div class="key">
+      <span class="tag">What that picture actually proves</span>
+      <p>TCP delivered <strong>6 of 6</strong> messages, perfectly ordered, and finished at t=40. UDP delivered <strong>5 of 6</strong>, one of them out of order, and finished at t=18.</p>
+      <p>Neither result is &ldquo;better.&rdquo; They are answers to different questions. If the messages are database writes, TCP&rsquo;s answer is the only acceptable one. If they are a player&rsquo;s position in a game at 60 frames per second, message 3 was obsolete before TCP even noticed it was missing — and message 4 sat finished in the receiver&rsquo;s buffer for sixteen time units waiting for a repair nobody wanted, with 5 and 6 queued behind it.</p>
+    </div>
+    <p><strong>Look specifically at t=24 through t=40 on the TCP side.</strong> Message 4 arrived at the receiving machine at t=24. The bytes were in memory, intact, correct. The application could not have them, because TCP guarantees in-order delivery and byte 3 was missing. That is not a bug — it is the guarantee working exactly as designed, and it is the single strongest argument for UDP that exists.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ CHECKSUM ══════════════════ -->
+<section id="checksum">
+  <div class="col sec-head">
+    <span class="eyebrow">The only integrity UDP offers</span>
+    <h2>A checksum you are technically allowed to skip</h2>
+    <p class="sec-sub">Same ones&rsquo;-complement algorithm as TCP, same pseudo-header — but with two twists that exist nowhere else in the stack.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The computation is identical to TCP&rsquo;s: sum everything as 16-bit big-endian words with end-around carry, then complement. It covers three things:</p>
+    <ol>
+      <li>A <strong>12-byte pseudo-header</strong> built from IP fields — source address, destination address, a zero byte, protocol number <span class="m">17</span>, and the UDP length. It is never transmitted; it exists so a datagram delivered to the wrong host fails validation.</li>
+      <li>The <strong>8-byte UDP header</strong>, with the checksum field itself set to zero.</li>
+      <li>The <strong>payload</strong>, zero-padded to an even length if needed (the pad is not sent).</li>
+    </ol>
+  </div>
+
+  <div class="panel" style="margin-top:18px">
+    <div class="panel-bar">
+      <h4>live checksum · the DNS query above</h4>
+      <button class="btn" id="ckFlip">Corrupt one byte</button>
+      <button class="btn" id="ckFix">Repair</button>
+      <span style="flex:1"></span>
+      <span class="chip" id="ckState">intact</span>
+    </div>
+    <div class="panel-body">
+      <div class="cksum-out" id="ckOut"></div>
+    </div>
+    <div class="panel-foot" id="ckFoot">Computed in your browser from the actual bytes, with the real pseudo-header. Corrupt a byte and the receiver&rsquo;s verification sum stops landing on <span class="m">0xFFFF</span>.</div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:26px">
+    <h3>Twist one: zero means &ldquo;I didn&rsquo;t bother&rdquo;</h3>
+    <p>Over IPv4 the UDP checksum is <strong>optional</strong>. A sender that does not want to compute it transmits <span class="m">0x0000</span>, and the receiver skips verification entirely. This was a 1980 concession to slow hardware on trusted local links.</p>
+    <p>Over <strong>IPv6 it is mandatory</strong>, with no exceptions, because IPv6 removed the header checksum that IPv4 had. Take the checksum away at both layers and a single flipped bit in a destination address delivers your datagram to a stranger with nothing to catch it.</p>
+
+    <h3 style="margin-top:24px">Twist two: the 0xFFFF substitution</h3>
+    <p>Here is the detail that makes UDP&rsquo;s checksum genuinely peculiar. What if the computed checksum legitimately comes out as <span class="m">0x0000</span>? It would be indistinguishable from &ldquo;no checksum computed,&rdquo; and every receiver would skip verification on exactly those datagrams.</p>
+    <p>RFC 768&rsquo;s answer: <strong>transmit <span class="m">0xFFFF</span> instead</strong>. This works because in ones&rsquo;-complement arithmetic there are two representations of zero — <span class="m">0x0000</span> (positive zero) and <span class="m">0xFFFF</span> (negative zero) — and they are numerically equal. The receiver&rsquo;s sum comes out the same either way. One value is reserved as a sentinel, the other carries the number.</p>
+    <div class="note">
+      <span class="tag">Why it is worth knowing</span>
+      <p>It is the clearest example in networking of a spec exploiting a property of its arithmetic to smuggle a flag into a value field with zero cost. It also explains a real bug class: implementations that compute the checksum correctly but forget the substitution produce datagrams that some peers verify and others silently accept unchecked.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SIZE ══════════════════ -->
+<section id="size">
+  <div class="col sec-head">
+    <span class="eyebrow">How big can a datagram be</span>
+    <h2>65,507 bytes in theory. About 1,200 in practice.</h2>
+    <p class="sec-sub">The gap between those two numbers is where most real UDP bugs live.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The Length field is 16 bits and counts the header plus payload, so the ceiling is 65,535. But the IPv4 <em>total length</em> field is also 16 bits and has to hold the IP header too:</p>
+    <pre>65,535   IPv4 total length, maximum
+  − 20   IPv4 header
+  −  8   UDP header
+─────────
+<b>65,507   largest UDP payload over IPv4</b>       <span class="cm">(65,527 over IPv6; larger still with IPv6 jumbograms)</span></pre>
+    <p>You should essentially never approach it. Anything larger than the path MTU minus 28 bytes gets <strong>fragmented by IP</strong>, and IP fragmentation is one of the most reliably disappointing mechanisms on the internet.</p>
+  </div>
+
+  <figure style="margin-top:20px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 830 268" role="img" aria-label="A 3000-byte UDP datagram is split by IP into three fragments to cross a 1500-byte MTU link. The middle fragment is lost, so the receiver cannot reassemble and discards all three. One lost packet costs the entire datagram.">
+        <defs>
+          <marker id="dn4" markerWidth="9" markerHeight="9" refX="4.5" refY="7" orient="auto"><polygon points="0,0 9,0 4.5,8" fill="currentColor"/></marker>
+        </defs>
+        <text class="amp-t" x="14" y="34">one send()</text>
+        <rect x="130" y="20" width="600" height="34" rx="3" fill="var(--udp-soft)" stroke="var(--udp)" stroke-width="1.5"/>
+        <text x="430" y="41" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--udp)">one UDP datagram — 3,000 bytes</text>
+        <line x1="430" y1="58" x2="430" y2="76" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn4)" opacity=".45"/>
+        <text x="442" y="72" style="font-family:var(--body);font-size:10.5px;font-style:italic;fill:var(--ink-3)">IP fragments it to cross a 1500-byte MTU</text>
+
+        <text class="amp-t" x="14" y="100">IP fragments</text>
+        <rect x="130" y="84" width="290" height="34" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.4"/>
+        <text x="275" y="105" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">frag 1 · offset 0 · 1480 B</text>
+        <rect x="426" y="84" width="290" height="34" rx="3" fill="var(--lost-soft)" stroke="var(--lost)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="571" y="105" text-anchor="middle" style="font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--lost)">frag 2 · offset 1480 · LOST</text>
+        <rect x="722" y="84" width="94" height="34" rx="3" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1.4"/>
+        <text x="769" y="105" text-anchor="middle" style="font-family:var(--mono);font-size:10px;fill:var(--ink-2)">frag 3</text>
+
+        <line x1="430" y1="122" x2="430" y2="140" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn4)" opacity=".45"/>
+
+        <text class="amp-t" x="14" y="164">reassembly</text>
+        <rect x="130" y="148" width="686" height="34" rx="3" fill="var(--lost-soft)" stroke="var(--lost)" stroke-width="1.5"/>
+        <text x="473" y="169" text-anchor="middle" style="font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--lost)">incomplete → the other two fragments are discarded after the reassembly timer expires</text>
+
+        <line x1="430" y1="186" x2="430" y2="204" stroke="currentColor" stroke-width="1.2" marker-end="url(#dn4)" opacity=".45"/>
+        <text class="amp-t" x="14" y="228">recvfrom()</text>
+        <rect x="130" y="212" width="686" height="34" rx="3" fill="var(--surface)" stroke="var(--line)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="473" y="233" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:var(--ink-3)">nothing. the application never learns the datagram existed.</text>
+        <text x="14" y="262" style="font-family:var(--body);font-size:11.5px;font-weight:600;fill:var(--ink)">One lost packet destroyed 3,000 bytes. Losing 1 in 100 packets loses 1 in 34 datagrams.</text>
+      </svg>
+    </div>
+    <figcaption>Fragment loss compounds. At 1% packet loss, a datagram split into <em>n</em> fragments survives with probability 0.99&#8319; — 99% for one fragment, 97% for three, 95% for five. And the loss is total: there is no partial delivery.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <p>Fragmentation fails in more ways than plain loss. Many firewalls and load balancers <strong>drop non-initial fragments outright</strong>, because only the first fragment carries the UDP header — and therefore the port numbers a stateless filter needs to make a decision. NAT devices frequently mishandle them for the same reason.</p>
+    <div class="warn">
+      <span class="tag">Practical rule</span>
+      <p><strong>Keep UDP payloads under about 1,200 bytes</strong> and you will fit inside essentially every path MTU on the internet, including tunnels and VPNs, without fragmenting. This is not folklore — it is what QUIC does (its minimum required datagram size is 1,200 bytes), what RFC 8085 advises, and what DNS resolvers converged on after fragmentation attacks. If your data does not fit, either implement your own splitting with per-piece recovery, or use TCP.</p>
+    </div>
+
+    <h3 style="margin-top:26px">The DNS 512-byte rule, and how it was lifted</h3>
+    <p>Classic DNS capped UDP responses at <strong>512 bytes</strong> — chosen because RFC 791 guarantees every IPv4 host can reassemble at least 576 bytes, leaving room for headers. A response that did not fit set the <span class="m">TC</span> (truncated) bit, and the resolver retried the whole query over TCP.</p>
+    <p><strong>EDNS0</strong> (RFC 6891) let a resolver advertise a larger buffer — often 4096 bytes — which worked until it did not: large fragmented responses became a fragmentation-attack vector and were dropped by middleboxes. Current practice has swung back hard. The <em>DNS Flag Day 2020</em> consensus recommends advertising around <strong>1232 bytes</strong>, small enough to never fragment, and falling back to TCP when a response exceeds it.</p>
+    <p>So DNS — the archetypal UDP protocol — ends up needing TCP as a companion. That is not a failure of UDP. It is UDP being used correctly: fast path over datagrams, reliable path for the rare large case.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ BRAKES ══════════════════ -->
+<section id="brakes">
+  <div class="col sec-head">
+    <span class="eyebrow">No flow control, no congestion control</span>
+    <h2>Nothing slows you down. That is your problem to solve.</h2>
+    <p class="sec-sub">TCP has two independent brakes — the receiver&rsquo;s window and the sender&rsquo;s congestion window. UDP has neither, and the failure is silent at both ends.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p><strong>Overrun the receiver</strong> and its socket buffer fills. The kernel does not signal you, does not slow you down, and does not queue for later — it <em>drops the datagram and increments a counter</em>. The sending application sees a successful <code>send()</code>. The receiving application sees a gap it may not even know about.</p>
+    <pre>$ netstat -su
+Udp:
+    481203 packets received
+    <b>1204 packet receive errors</b>          <span class="cm">← datagrams dropped, for any reason</span>
+    <b>1204 receive buffer errors</b>          <span class="cm">← all of them: the socket buffer was full</span>
+    17 packets to unknown port received     <span class="cm">← these got an ICMP port-unreachable back</span>
+
+$ ss -ulnm 'sport = :5060'                <span class="cm"># -m shows the socket memory</span>
+    skmem:(r0,rb<b>212992</b>,t0,tb212992,...)     <span class="cm">← rb = SO_RCVBUF, the drop threshold</span></pre>
+    <p>The fix is a bigger buffer and a faster reader: raise <span class="m">SO_RCVBUF</span> (bounded by <span class="m">net.core.rmem_max</span>), and never do real work on the thread that calls <code>recvfrom()</code> — drain into a queue and process elsewhere. On high-rate receivers, <span class="m">recvmmsg()</span> pulls many datagrams per syscall.</p>
+
+    <h3 style="margin-top:26px">The part that affects everyone else</h3>
+    <p><strong>Overrun the network</strong> and there is no cwnd to collapse, no sawtooth, no backoff. A UDP sender in a tight loop will happily saturate a bottleneck link and keep going, and because loss-based TCP flows sharing that link <em>do</em> back off, your traffic crowds them out entirely.</p>
+    <div class="warn">
+      <span class="tag">RFC 8085 is not optional reading</span>
+      <p>The IETF&rsquo;s UDP usage guidelines are blunt about this: an application sending more than a few datagrams per round trip <strong>should implement congestion control</strong>, no more aggressive than TCP would be under the same conditions. In IETF language that &ldquo;should&rdquo; means &ldquo;do it unless you can defend not doing it&rdquo; — a real engineering obligation, not etiquette — bulk UDP without backoff is how you cause an outage for traffic that has nothing to do with you. If you are sending at volume, use QUIC, or DCCP, or a rate limiter you actually tuned. &ldquo;UDP is faster&rdquo; stops being true the moment the bottleneck queue is full of your own retransmits.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CONNECT ══════════════════ -->
+<section id="connect">
+  <div class="col sec-head">
+    <span class="eyebrow">A surprising API</span>
+    <h2>You can call <code>connect()</code> on a UDP socket</h2>
+    <p class="sec-sub">It sends no packets and establishes nothing. It is still one of the most useful things you can do.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>UDP is connectionless, so <code>connect()</code> looks like a category error. It is not — it is a purely local operation that stores a default peer in the socket, and it buys you three concrete things:</p>
+    <ol>
+      <li><strong>You can use <code>send()</code> and <code>recv()</code></strong> instead of <code>sendto()</code>/<code>recvfrom()</code>, without repeating the address on every call.</li>
+      <li><strong>The kernel filters inbound datagrams</strong> to that peer only. Datagrams from anyone else are not delivered to this socket. This is a convenience, not a security boundary — a source address can be forged.</li>
+      <li><strong>You start receiving ICMP errors.</strong> This is the big one.</li>
+    </ol>
+    <div class="key">
+      <span class="tag">The ICMP behaviour nobody expects</span>
+      <p>On an <em>unconnected</em> UDP socket, ICMP errors are discarded — the kernel has no way to know which of your many peers an error refers to, so <code>sendto()</code> to a host with nothing listening returns success and you learn nothing. On a <em>connected</em> UDP socket, that same ICMP <span class="m">port unreachable</span> is matched to the socket and surfaces on your next call as <span class="m">ECONNREFUSED</span>.</p>
+      <p>So the difference between &ldquo;my UDP client hangs on a timeout forever&rdquo; and &ldquo;my UDP client fails instantly with a clear error&rdquo; is one <code>connect()</code> call that transmits nothing.</p>
+    </div>
+    <p>It is also faster on Linux for repeated sends to the same destination, because the route lookup is cached on the socket rather than redone per datagram. To undo it, call <code>connect()</code> again with an address family of <span class="m">AF_UNSPEC</span>.</p>
+    <p>Servers generally stay unconnected — one socket serving every client is UDP&rsquo;s whole scaling advantage. Clients talking to one server should almost always connect.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ USERS ══════════════════ -->
+<section id="users">
+  <div class="col sec-head">
+    <span class="eyebrow">Who chose UDP, and why</span>
+    <h2>The protocols that could not have used TCP</h2>
+    <p class="sec-sub">In every case the reason is specific. Notice how many rebuilt reliability themselves — and exactly which parts they kept.</p>
+  </div>
+
+  <div class="col" style="margin-top:6px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Protocol</th><th class="n">Port</th><th>Why UDP</th><th>What it rebuilt on top</th></tr></thead>
+        <tbody>
+          <tr><td><strong>DNS</strong></td><td class="n">53</td><td>One small request, one small reply. A handshake would triple the latency of the most frequent transaction on the internet.</td><td>Timeout + retry, a 16-bit transaction ID for matching, TCP fallback when <span class="m">TC</span> is set</td></tr>
+          <tr><td><strong>QUIC</strong> / HTTP&nbsp;3</td><td class="n">443</td><td>Needed per-stream loss recovery, which TCP structurally cannot give. Also deployable — TCP changes require new kernels, QUIC ships in userspace.</td><td><em>Everything.</em> Streams, ACKs, congestion control, TLS 1.3, connection migration, 0-RTT</td></tr>
+          <tr><td><strong>DHCP</strong></td><td class="n">67/68</td><td>The client has no IP address yet. You cannot open a TCP connection without one, and it must broadcast to find a server.</td><td>Retry with exponential backoff, transaction IDs</td></tr>
+          <tr><td><strong>NTP</strong></td><td class="n">123</td><td>Measuring time needs the <em>minimum</em> path delay. TCP&rsquo;s retransmits and buffering add unpredictable, asymmetric delay — poison for a clock.</td><td>Nothing. A lost sample is simply skipped; it polls again</td></tr>
+          <tr><td><strong>RTP</strong> / WebRTC</td><td class="n">dynamic</td><td>A late voice packet is worthless. Retransmitting it means a gap <em>and</em> a stall. Better to conceal the loss and keep playing.</td><td>Sequence numbers and timestamps for reordering and jitter buffers, RTCP for feedback, FEC, selective NACK</td></tr>
+          <tr><td><strong>Online games</strong></td><td class="n">varies</td><td>State updates are absolute, not incremental. Position at t=100 makes position at t=99 irrelevant — never retransmit it.</td><td>Sequence numbers, delta compression, client-side prediction, redundant state in each packet</td></tr>
+          <tr><td><strong>WireGuard</strong></td><td class="n">51820</td><td>A VPN carrying TCP inside TCP produces &ldquo;TCP meltdown&rdquo; — two retransmit timers fighting each other, each making the other worse.</td><td>Its own handshake and replay protection; the tunnelled protocol handles its own reliability</td></tr>
+          <tr><td><strong>syslog</strong></td><td class="n">514</td><td>Logging must never block or slow the application it is instrumenting. Dropping a log line beats stalling a request.</td><td>Nothing — deliberately. RFC 5425 defines a TLS/TCP variant when you need delivery</td></tr>
+          <tr><td><strong>SNMP</strong></td><td class="n">161/162</td><td>Polling thousands of devices; per-device TCP state on the poller would be enormous, and monitoring must work when the network is already sick.</td><td>Request IDs, timeout and retry in the manager</td></tr>
+          <tr><td><strong>mDNS / SSDP</strong></td><td class="n">5353 / 1900</td><td>Service discovery is inherently one-to-many. TCP cannot multicast at all.</td><td>Repetition, randomised delays to avoid response storms</td></tr>
+          <tr><td><strong>TFTP</strong></td><td class="n">69</td><td>Small enough to fit in a boot ROM. UDP plus 30 lines of retry logic beats a TCP stack in firmware.</td><td>Stop-and-wait with block numbers and ACKs — reliability, rebuilt badly, on purpose</td></tr>
+          <tr><td><strong>QUIC-based DNS</strong> (DoQ)</td><td class="n">853</td><td>Encryption plus UDP&rsquo;s latency, without TCP&rsquo;s head-of-line blocking across concurrent queries.</td><td>Inherits everything from QUIC</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <div class="note">
+      <span class="tag">The pattern</span>
+      <p>Read the last column and a rule emerges. These protocols did not choose UDP because they wanted <em>less</em> reliability — several of them rebuilt more machinery than TCP has. They chose it because they needed a <strong>different</strong> reliability: per-stream instead of per-connection, or bounded-latency instead of guaranteed, or none-at-all for data that expires faster than it can be repaired. TCP offers exactly one policy and it is not configurable. UDP offers none, so you can write your own.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ MULTICAST ══════════════════ -->
+<section id="multicast">
+  <div class="col sec-head">
+    <span class="eyebrow">One send, many receivers</span>
+    <h2>Territory TCP cannot enter</h2>
+  </div>
+  <div class="col sec-body">
+    <p>TCP is definitionally point-to-point: a connection is a four-tuple between exactly two endpoints, and its acknowledgment mechanism has no meaning with a thousand receivers. UDP has no such constraint, so it owns everything one-to-many.</p>
+  </div>
+  <div class="grid3" style="margin-top:14px">
+    <div class="card">
+      <h4>Unicast</h4>
+      <p>One sender, one receiver. Both TCP and UDP. <em>n</em> receivers costs <em>n</em> copies on the wire.</p>
+    </div>
+    <div class="card">
+      <h4>Broadcast <span class="chip u">UDP only</span></h4>
+      <p>To every host on the local link — <span class="m">255.255.255.255</span> or the subnet broadcast. Routers do not forward it. This is how DHCP finds a server before it has an address. IPv6 removed broadcast entirely in favour of multicast.</p>
+    </div>
+    <div class="card">
+      <h4>Multicast <span class="chip u">UDP only</span></h4>
+      <p>To a group address (<span class="m">224.0.0.0/4</span> in IPv4, <span class="m">ff00::/8</span> in IPv6) that receivers opt into via IGMP or MLD. The sender transmits <strong>one</strong> packet and the network duplicates it only where paths diverge.</p>
+    </div>
+  </div>
+  <div class="col sec-body" style="margin-top:20px">
+    <p>Multicast is what lets an exchange fan a market-data feed out to hundreds of trading systems at identical latency from a single send, and what carries IPTV inside a provider&rsquo;s network. Its limitation is reach: <strong>multicast is essentially undeliverable across the public internet</strong>, because it requires router support and inter-domain agreement that never materialised. Inside a datacenter or a carrier network it is indispensable; between them, nobody uses it.</p>
+    <p>Familiar group addresses you will meet: <span class="m">224.0.0.1</span> all hosts on the subnet, <span class="m">224.0.0.251</span> mDNS/Bonjour, <span class="m">239.255.255.250</span> SSDP and UPnP device discovery.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ AMPLIFICATION ══════════════════ -->
+<section id="amp">
+  <div class="col sec-head">
+    <span class="eyebrow">The dark side</span>
+    <h2>Why UDP is the internet&rsquo;s favourite weapon</h2>
+    <p class="sec-sub">Two of UDP&rsquo;s defining properties combine into the single most effective DDoS technique in existence. Understanding it is not optional if you deploy a UDP service.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>The mechanism needs only two ingredients, and UDP supplies both:</p>
+    <ol>
+      <li><strong>No handshake means the source address is never verified.</strong> TCP&rsquo;s three-way handshake incidentally proves the client can receive at the address it claims — you cannot complete it while lying about who you are. UDP has no such step, so an attacker can put <em>the victim&rsquo;s</em> address in the source field and the server will reply to the victim.</li>
+      <li><strong>Some UDP services answer a tiny question with an enormous reply.</strong> That ratio is the amplification factor, and the attacker&rsquo;s bandwidth is multiplied by it.</li>
+    </ol>
+  </div>
+
+  <figure style="margin-top:20px">
+    <div class="fig-box">
+      <svg class="diagram" viewBox="0 0 830 350" role="img" aria-label="Bandwidth amplification factors by protocol on a logarithmic scale: memcached up to 51000 times, NTP monlist 557, CharGen 359, RIPv1 131, CLDAP 56, DNS 54, SSDP 31, SNMPv2 6.3, NetBIOS 3.8.">
+        <line class="amp-grid" x1="120" y1="38" x2="120" y2="310"/>
+        <line class="amp-grid" x1="243.2" y1="38" x2="243.2" y2="310"/>
+        <line class="amp-grid" x1="366.4" y1="38" x2="366.4" y2="310"/>
+        <line class="amp-grid" x1="489.7" y1="38" x2="489.7" y2="310"/>
+        <line class="amp-grid" x1="612.9" y1="38" x2="612.9" y2="310"/>
+        <line class="amp-ax" x1="120" y1="36" x2="760" y2="36"/>
+        <text class="amp-t" x="120" y="28" text-anchor="middle">1×</text>
+        <text class="amp-t" x="243.2" y="28" text-anchor="middle">10×</text>
+        <text class="amp-t" x="366.4" y="28" text-anchor="middle">100×</text>
+        <text class="amp-t" x="489.7" y="28" text-anchor="middle">1,000×</text>
+        <text class="amp-t" x="612.9" y="28" text-anchor="middle">10,000×</text>
+        <text class="amp-t" x="700" y="28" text-anchor="middle">51,000×</text>
+
+        <text class="amp-lbl" x="112" y="60" text-anchor="end">memcached</text>
+        <rect class="amp-bar hi" x="120" y="46" width="580" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="60" text-anchor="end" style="fill:var(--lost)">up to 51,000×</text>
+
+        <text class="amp-lbl" x="112" y="90" text-anchor="end">NTP · monlist</text>
+        <rect class="amp-bar" x="120" y="76" width="338.3" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="90" text-anchor="end">556.9×</text>
+
+        <text class="amp-lbl" x="112" y="120" text-anchor="end">CharGen</text>
+        <rect class="amp-bar" x="120" y="106" width="314.8" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="120" text-anchor="end">358.8×</text>
+
+        <text class="amp-lbl" x="112" y="150" text-anchor="end">RIPv1</text>
+        <rect class="amp-bar" x="120" y="136" width="260.9" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="150" text-anchor="end">131.2×</text>
+
+        <text class="amp-lbl" x="112" y="180" text-anchor="end">CLDAP</text>
+        <rect class="amp-bar" x="120" y="166" width="215.4" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="180" text-anchor="end">56×</text>
+
+        <text class="amp-lbl" x="112" y="210" text-anchor="end">DNS</text>
+        <rect class="amp-bar" x="120" y="196" width="213.5" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="210" text-anchor="end">28–54×</text>
+
+        <text class="amp-lbl" x="112" y="240" text-anchor="end">SSDP</text>
+        <rect class="amp-bar" x="120" y="226" width="183.8" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="240" text-anchor="end">30.8×</text>
+
+        <text class="amp-lbl" x="112" y="270" text-anchor="end">SNMPv2</text>
+        <rect class="amp-bar" x="120" y="256" width="98.5" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="270" text-anchor="end">6.3×</text>
+
+        <text class="amp-lbl" x="112" y="300" text-anchor="end">NetBIOS</text>
+        <rect class="amp-bar" x="120" y="286" width="71.4" height="19" rx="2"/>
+        <text class="amp-val" x="800" y="300" text-anchor="end">3.8×</text>
+
+        <text class="amp-t" x="120" y="332">logarithmic scale · bandwidth amplification factor · US-CERT TA14-013A and later measurements</text>
+      </svg>
+    </div>
+    <figcaption>The 2018 memcached attacks peaked at <strong>1.35 Tbit/s against GitHub</strong> — at the time the largest DDoS ever recorded, generated from a tiny fraction of that bandwidth. The cause was tens of thousands of memcached servers exposed to the internet on UDP port 11211 by default, with no authentication.</figcaption>
+  </figure>
+
+  <div class="col sec-body" style="margin-top:24px">
+    <h3>What to do about it</h3>
+    <p><strong>If you operate a network:</strong> implement <strong>BCP 38</strong> (RFC 2827) ingress filtering — drop outbound packets whose source address does not belong to your network. If every network did this, source spoofing would be impossible and this entire attack class would disappear. It has been the standing recommendation since 2000; adoption is still incomplete, which is why the attacks continue.</p>
+    <p><strong>If you run a UDP service:</strong></p>
+    <ul>
+      <li><strong>Never let the response be much larger than the request.</strong> This is the whole game. If your protocol can return a large reply to a small query, it is an amplifier.</li>
+      <li><strong>Validate the source address before doing expensive work.</strong> This is exactly what QUIC&rsquo;s <em>address validation</em> does: a server that has not yet confirmed a client&rsquo;s address may not send more than three times what it received, and it can force a round trip with a Retry token — a handshake, reinvented precisely because UDP lacks one.</li>
+      <li><strong>Rate-limit per source</strong>, and respond to repeated identical queries with a truncated answer that forces a TCP retry (this is DNS <em>Response Rate Limiting</em>).</li>
+      <li><strong>Do not expose it by default.</strong> memcached, Redis, and SNMP have no business listening on a public interface. memcached disabled UDP by default in version 1.5.6, after the fact.</li>
+    </ul>
+    <div class="warn">
+      <span class="tag">A test worth running</span>
+      <p>Point <span class="m">nmap -sU</span> at your own public ranges. Every open UDP port that answers an unauthenticated query with a larger response is a weapon someone else can aim. It is the fastest security audit in networking and almost nobody does it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ RELIABLE ══════════════════ -->
+<section id="reliable">
+  <div class="col sec-head">
+    <span class="eyebrow">Building on top</span>
+    <h2>&ldquo;We&rsquo;ll just add reliability to UDP&rdquo;</h2>
+    <p class="sec-sub">A reasonable instinct that has produced a great deal of broken software. Here is the actual bill.</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>If you need every message delivered, in order, exactly once, at a rate the network can bear, this is the full list of what TCP was doing for you — and what you now own:</p>
+  </div>
+
+  <div class="col" style="margin-top:16px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Mechanism</th><th>Why you need it</th><th>Difficulty</th></tr></thead>
+        <tbody>
+          <tr><td>Sequence numbers</td><td>detect loss, restore order, discard duplicates</td><td><span class="chip ok">easy</span></td></tr>
+          <tr><td>Acknowledgments</td><td>the sender must learn what arrived</td><td><span class="chip ok">easy</span></td></tr>
+          <tr><td>Retransmission timer</td><td>when to resend — and the timeout must adapt to the path</td><td><span class="chip">medium</span></td></tr>
+          <tr><td>RTT estimation</td><td>a fixed timeout is either far too slow or a retransmit storm</td><td><span class="chip">medium</span></td></tr>
+          <tr><td>Reordering buffer</td><td>hold out-of-order data until the gap is filled</td><td><span class="chip">medium</span></td></tr>
+          <tr><td>Flow control</td><td>stop overrunning a slow receiver&rsquo;s buffer</td><td><span class="chip">medium</span></td></tr>
+          <tr><td><strong>Congestion control</strong></td><td>stop overrunning the <em>network</em> — and be fair to everyone else on it</td><td><span class="chip d">hard</span></td></tr>
+          <tr><td>Path MTU discovery</td><td>avoid fragmentation on every path your packets take</td><td><span class="chip d">hard</span></td></tr>
+          <tr><td>Connection identity</td><td>distinguish a peer&rsquo;s new session from a stale one; survive NAT rebinding</td><td><span class="chip d">hard</span></td></tr>
+          <tr><td>Keepalive / NAT traversal</td><td>NAT drops idle UDP mappings in 30 s to 2 minutes</td><td><span class="chip">medium</span></td></tr>
+          <tr><td>Address validation</td><td>so you are not an amplifier</td><td><span class="chip">medium</span></td></tr>
+          <tr><td>Encryption &amp; authentication</td><td>UDP offers neither, and a spoofed datagram is trivial to inject</td><td><span class="chip d">hard</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col sec-body" style="margin-top:22px">
+    <p>The first six are a weekend. <strong>Congestion control is not.</strong> It took the networking community thirty years — from the congestion collapse of 1986, through Tahoe, Reno and CUBIC, to BBR in 2016 — to get it right. Getting it wrong does not produce a bug you notice in testing — it produces a system that works beautifully on your LAN and degrades the network for everyone once deployed.</p>
+    <div class="key">
+      <span class="tag">The honest recommendation</span>
+      <p>If you need full reliability over UDP, <strong>use QUIC</strong>. It is RFC 9000, it is deployed at internet scale by Google, Cloudflare, Meta and Apple, it has been attacked and patched for years, and mature libraries exist for every language (<span class="m">quic-go</span>, <span class="m">quinn</span>, <span class="m">msquic</span>, <span class="m">aioquic</span>, <span class="m">lsquic</span>). It gives you every row of that table plus TLS 1.3, multiple independent streams without head-of-line blocking, and connection migration across network changes.</p>
+      <p>Roll your own only when you genuinely need <em>partial</em> reliability — the case QUIC does not cover and TCP cannot express. Real-time media is the honest example: retransmit the keyframe, drop the stale audio packet, and never stall the stream for either.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CHOOSE ══════════════════ -->
+<section id="choose">
+  <div class="col sec-head">
+    <span class="eyebrow">The decision</span>
+    <h2>Which one, and why</h2>
+    <p class="sec-sub">The useful question is not &ldquo;do I need reliability?&rdquo; — everyone says yes. It is &ldquo;what is a late message worth to me?&rdquo;</p>
+  </div>
+
+  <div class="col sec-body">
+    <p>Ask it in this order:</p>
+    <ol>
+      <li><strong>Is stale data worse than no data?</strong> If a message that arrives 300 ms late is useless or actively harmful — a video frame, a player&rsquo;s position, a clock sample — retransmission is not a feature, it is damage. <strong>UDP.</strong></li>
+      <li><strong>Does one lost message have to block the others?</strong> If you have independent streams sharing a link, TCP will stall all of them for one loss. <strong>QUIC over UDP.</strong></li>
+      <li><strong>Is it one small request and one small reply?</strong> A handshake would dominate the cost. <strong>UDP</strong>, with your own timeout and retry.</li>
+      <li><strong>Do you need one-to-many?</strong> <strong>UDP.</strong> TCP cannot do it at all.</li>
+      <li><strong>Is there no IP address yet, or no network state to rely on?</strong> <strong>UDP.</strong></li>
+      <li><strong>Anything else — a bulk transfer, an API call, a database connection?</strong> <strong>TCP.</strong> Use the thirty years of tuning that already exist.</li>
+    </ol>
+    <div class="note">
+      <span class="tag">Two myths worth dropping</span>
+      <p><strong>&ldquo;UDP is faster than TCP.&rdquo;</strong> Not in throughput — on a healthy path a single TCP flow will beat naive UDP, because congestion control keeps it out of full queues. UDP wins on <em>latency</em>: no setup round trip, and no head-of-line blocking. Those are different words and the difference matters.</p>
+      <p><strong>&ldquo;UDP is unreliable, so it&rsquo;s for unimportant data.&rdquo;</strong> UDP carries DNS, the boot process of every device on a network, the world&rsquo;s time synchronisation, and a large and rising share of all web traffic via HTTP/3. It is not the protocol for data that does not matter. It is the protocol for data whose <em>value decays faster than the network can repair it</em> — or whose recovery you want to control yourself.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SEE IT ══════════════════ -->
+<section id="seeit">
+  <div class="col sec-head">
+    <span class="eyebrow">Hands on</span>
+    <h2>Send a datagram in the next thirty seconds</h2>
+  </div>
+  <div class="col sec-body">
+    <pre><span class="cm"># terminal 1 — listen on UDP 9999 and print what arrives</span>
+$ nc -u -l 9999
+
+<span class="cm"># terminal 2 — send one datagram. no handshake, no connection, no reply.</span>
+$ echo "hello" | nc -u -w1 127.0.0.1 9999
+
+<span class="cm"># send to a port where nothing is listening — note that it "succeeds"</span>
+$ echo "hello" | nc -u -w1 127.0.0.1 9998      <span class="cm"># the ICMP error is discarded</span></pre>
+
+    <h3 style="margin-top:24px">Watch a real DNS query</h3>
+    <pre>$ sudo tcpdump -i any -n -v 'udp port 53'
+$ dig +notcp @1.1.1.1 example.com A
+
+IP 192.0.2.10.54321 &gt; 1.1.1.1.53: 43981+ A? example.com. (<b>29</b>)
+IP 1.1.1.1.53 &gt; 192.0.2.10.54321: 43981 1/0/0 A 93.184.216.34 (<b>45</b>)
+
+<span class="cm"># 29 bytes out, 45 bytes back, one round trip, zero setup.
+# force the TCP fallback and compare the packet count:</span>
+$ dig +tcp @1.1.1.1 example.com A</pre>
+
+    <h3 style="margin-top:24px">Inspect UDP sockets and drops</h3>
+    <pre>$ ss -ulnp                       <span class="cm"># listening UDP sockets and their processes</span>
+$ ss -ulnm                       <span class="cm"># add socket memory: rb is SO_RCVBUF, the drop threshold</span>
+$ netstat -su                    <span class="cm"># receive errors = datagrams the kernel threw away</span>
+$ nstat -az | grep -i udp
+UdpInDatagrams      481203
+<b>UdpInErrors           1204</b>       <span class="cm"># mostly buffer overrun — a slow reader</span>
+<b>UdpNoPorts              17</b>       <span class="cm"># nothing listening; an ICMP unreachable was sent</span>
+<b>UdpRcvbufErrors       1204</b>
+
+<span class="cm"># see fragmentation happening</span>
+$ nstat -az | grep -i reasm
+IpReasmReqds          8821       <span class="cm"># fragments needing reassembly</span>
+<b>IpReasmFails            94</b>       <span class="cm"># datagrams lost because a fragment never arrived</span></pre>
+
+    <h3 style="margin-top:24px">Wireshark filters</h3>
+    <div class="tbl-scroll" style="margin-top:8px">
+      <table>
+        <thead><tr><th>Filter</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td class="n">udp</td><td>all UDP traffic</td></tr>
+          <tr><td class="n">udp.length &gt; 1400</td><td>datagrams heading for fragmentation</td></tr>
+          <tr><td class="n">udp.checksum == 0</td><td>senders skipping the checksum entirely</td></tr>
+          <tr><td class="n">ip.flags.mf == 1 || ip.frag_offset &gt; 0</td><td>fragments — every one is a risk</td></tr>
+          <tr><td class="n">icmp.type == 3 &amp;&amp; icmp.code == 3</td><td>port unreachable — nothing was listening</td></tr>
+          <tr><td class="n">dns.flags.truncated == 1</td><td>responses that forced a TCP retry</td></tr>
+          <tr><td class="n">quic</td><td>HTTP/3 — UDP&rsquo;s largest modern tenant</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CHEAT SHEET ══════════════════ -->
+<section id="card">
+  <div class="col sec-head">
+    <span class="eyebrow">Reference card</span>
+    <h2>The numbers worth memorising</h2>
+  </div>
+
+  <div class="grid3" style="margin-top:6px">
+    <div class="card">
+      <h4>Header</h4>
+      <p><span class="m">8 bytes</span>, always. Source port, destination port, length, checksum — 16 bits each. No options, no flags, no sequence number.</p>
+    </div>
+    <div class="card">
+      <h4>Sizes</h4>
+      <p>Max payload <span class="m">65,507 B</span> over IPv4 (<span class="m">65,527</span> over IPv6). <strong>Stay under ~1,200 B</strong> to never fragment. Length field counts header + payload, minimum <span class="m">8</span>.</p>
+    </div>
+    <div class="card">
+      <h4>Checksum</h4>
+      <p>Optional on IPv4 (<span class="m">0x0000</span> = not computed), <strong>mandatory on IPv6</strong>. A real zero result is sent as <span class="m">0xFFFF</span>. Covers a 12-byte pseudo-header, protocol number <span class="m">17</span>.</p>
+    </div>
+    <div class="card">
+      <h4>Guarantees</h4>
+      <p><strong>Kept:</strong> message boundaries, all-or-nothing delivery, integrity if the checksum is on. <strong>Absent:</strong> delivery, ordering, duplicate suppression, flow control, congestion control.</p>
+    </div>
+    <div class="card">
+      <h4>Ports to know</h4>
+      <p><span class="m">53</span> DNS · <span class="m">67/68</span> DHCP · <span class="m">69</span> TFTP · <span class="m">123</span> NTP · <span class="m">161</span> SNMP · <span class="m">443</span> QUIC/HTTP&nbsp;3 · <span class="m">514</span> syslog · <span class="m">1900</span> SSDP · <span class="m">5353</span> mDNS · <span class="m">51820</span> WireGuard</p>
+    </div>
+    <div class="card">
+      <h4>Obligations</h4>
+      <p>RFC 8085: implement congestion control above a few datagrams per RTT. Keep responses no larger than requests. Validate source addresses before expensive work.</p>
+    </div>
+  </div>
+
+  <div class="col" style="margin-top:22px">
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Symptom</th><th>Most likely cause</th><th>Check</th></tr></thead>
+        <tbody>
+          <tr><td>Datagrams vanish under load, none under test</td><td>receive buffer overrun — the reader is too slow</td><td class="n">netstat -su · raise SO_RCVBUF</td></tr>
+          <tr><td>Small messages fine, large ones never arrive</td><td>fragmentation — a fragment lost or filtered</td><td class="n">nstat | grep Reasm · stay under 1200 B</td></tr>
+          <tr><td>Client hangs instead of failing fast</td><td>unconnected socket discards the ICMP error</td><td class="n">call connect() on the UDP socket</td></tr>
+          <tr><td>Only part of a message arrives</td><td>recv buffer smaller than the datagram; the rest is dropped</td><td class="n">size the buffer to your max · MSG_TRUNC</td></tr>
+          <tr><td>Works, then dies after ~30 s idle</td><td>NAT dropped the mapping</td><td class="n">send a keepalive every 15–25 s</td></tr>
+          <tr><td>Your traffic starves TCP on the same link</td><td>no congestion control</td><td class="n">rate-limit, or move to QUIC</td></tr>
+          <tr><td>Abuse complaints about your server</td><td>you are an amplifier</td><td class="n">nmap -sU your own ranges</td></tr>
+          <tr><td>DNS works for some names, not others</td><td>large responses fragmenting or being truncated</td><td class="n">dig +bufsize=1232 · dig +tcp</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col foot">
+    <p><strong>UDP on the Wire</strong> — companion to <em>TCP on the Wire</em>. Checked against RFC 768 (the protocol itself, still unrevised since 1980), RFC 1122 (host requirements), RFC 8085 (usage guidelines — the one most UDP applications should read and don&rsquo;t), RFC 6891 (EDNS0), RFC 9000 (QUIC), RFC 2827 / BCP 38 (ingress filtering), and US-CERT alert TA14-013A for the amplification figures.</p>
+    <p>The DNS query decoded above is a real, valid query for <span class="m">example.com</span>, and its checksum is computed in your browser from those exact bytes with the real IPv4 pseudo-header.</p>
+  </div>
+</section>
+
+</main>
+<script>
+(function(){
+'use strict';
+var RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var NS = 'http://www.w3.org/2000/svg';
+function el(t,a){ var n=document.createElementNS(NS,t); for(var k in a) n.setAttribute(k,a[k]); return n; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function hex(v,w){ return '0x' + v.toString(16).toUpperCase().padStart(w||4,'0'); }
+
+/* ══════════════════════════════════════════════════
+   1. DUAL LADDER — TCP beside UDP, one time axis
+   ══════════════════════════════════════════════════ */
+var LINES = { t:{a:86,b:250,mark:258}, u:{a:400,b:560,mark:568} };
+var LW = 660, TOP = 76, PX = 15, TEND = 46, DIV = 352;
+var LH = Math.round(TOP + TEND*PX + 26);
+function Y(t){ return TOP + t*PX; }
+
+var EV = [
+ {p:'t', t:0,  d:1,  k:'ctl', n:'SYN'},
+ {p:'t', t:6,  d:-1, k:'ctl', n:'SYN, ACK'},
+ {p:'t', t:12, d:1,  k:'msg', n:'ACK + msg 1', m:1},
+ {p:'t', t:14, d:1,  k:'msg', n:'msg 2', m:2},
+ {p:'t', t:16, d:1,  k:'msg', n:'msg 3', m:3, lost:true},
+ {p:'t', t:18, d:1,  k:'msg', n:'msg 4', m:4},
+ {p:'t', t:20, d:1,  k:'msg', n:'msg 5', m:5},
+ {p:'t', t:20, d:-1, k:'ctl', n:'ACK'},
+ {p:'t', t:22, d:1,  k:'msg', n:'msg 6', m:6},
+ {p:'t', t:24, d:-1, k:'ctl', n:'dup ACK 1'},
+ {p:'t', t:26, d:-1, k:'ctl', n:'dup ACK 2'},
+ {p:'t', t:28, d:-1, k:'ctl', n:'dup ACK 3'},
+ {p:'t', t:34, d:1,  k:'msg', n:'retransmit 3', m:3, retx:true},
+ {p:'u', t:0,  d:1,  k:'msg', n:'msg 1', m:1},
+ {p:'u', t:2,  d:1,  k:'msg', n:'msg 2', m:2},
+ {p:'u', t:4,  d:1,  k:'msg', n:'msg 3', m:3, lost:true},
+ {p:'u', t:6,  d:1,  k:'msg', n:'msg 4', m:4},
+ {p:'u', t:8,  d:1,  k:'msg', n:'msg 5', m:5, prop:10},
+ {p:'u', t:10, d:1,  k:'msg', n:'msg 6', m:6}
+];
+var ARRIVE = { t:{1:18,2:20,3:40,4:24,5:26,6:28}, u:{1:6,2:8,4:12,5:18,6:16} };
+var DELIV  = { t:{1:18,2:20,3:40,4:40,5:40,6:40}, u:{1:6,2:8,4:12,5:18,6:16} };
+var LOSTAT = { t:19.3, u:7.3 };
+
+var svg = document.getElementById('dualLad');
+var scroller = document.getElementById('labScroll');
+var T = TEND, playing = false, lastTs = 0, holdRect = null, holdText = null;
+
+function build(){
+  svg.setAttribute('viewBox', '0 0 ' + LW + ' ' + LH);
+  svg.setAttribute('width', LW);
+  svg.setAttribute('height', LH);
+
+  var hd = [
+    {p:'t', name:'TCP', cls:'t', an:'sender', bn:'receiver'},
+    {p:'u', name:'UDP', cls:'u', an:'sender', bn:'receiver'}
+  ];
+  hd.forEach(function(h){
+    var L = LINES[h.p], mid = (L.a + L.b) / 2;
+    var pn = el('text', {class:'lad-proto ' + h.cls, x:mid, y:24, 'text-anchor':'middle'});
+    pn.textContent = h.name; svg.appendChild(pn);
+    [[L.a, h.an], [L.b, h.bn]].forEach(function(q){
+      var tx = el('text', {class:'lad-host', x:q[0], y:44, 'text-anchor':'middle'});
+      tx.textContent = q[1]; svg.appendChild(tx);
+      svg.appendChild(el('line', {class:'lad-line', x1:q[0], y1:52, x2:q[0], y2:LH-10}));
+    });
+  });
+  svg.appendChild(el('line', {class:'lad-div', x1:DIV, y1:14, x2:DIV, y2:LH-10}));
+
+  for(var tt=0; tt<=44; tt+=4){
+    svg.appendChild(el('line', {class:'lad-tickline', x1:44, y1:Y(tt), x2:LW-8, y2:Y(tt)}));
+    var lb = el('text', {class:'lad-tick', x:38, y:Y(tt)+3.5, 'text-anchor':'end'});
+    lb.textContent = 't=' + tt; svg.appendChild(lb);
+  }
+
+  // head-of-line blocking band (TCP only)
+  holdRect = el('rect', {x:254, y:Y(24), width:84, height:Y(40)-Y(24), rx:3,
+                         fill:'var(--lost-soft)', stroke:'var(--lost-line)', 'stroke-width':1,
+                         'stroke-dasharray':'4 3', opacity:0});
+  svg.appendChild(holdRect);
+  var hy = Y(24) + (Y(40)-Y(24))/2;
+  holdText = el('text', {x:296, y:hy, 'text-anchor':'middle', opacity:0,
+                         transform:'rotate(-90 296 ' + hy + ')',
+                         style:'font-family:var(--mono);font-size:9.5px;font-weight:600;fill:var(--lost)'});
+  holdText.textContent = 'arrived · held · not deliverable';
+  svg.appendChild(holdText);
+
+  EV.forEach(function(e){
+    var L = LINES[e.p];
+    e._prop = e.prop || 6;
+    e._sx = (e.d === 1 ? L.a + 4 : L.b - 4);
+    e._ex = (e.d === 1 ? L.b - 4 : L.a + 4);
+    e._sy = Y(e.t);
+    e._ey = Y(e.t + e._prop);
+    var f = 0.33;
+    e._lx = e._sx + (e._ex - e._sx) * f;
+    e._ly = e._sy + (e._ey - e._sy) * f - 6;
+
+    var cls = 'pk ' + (e.k === 'ctl' ? 'ctl' : e.p) + (e.lost ? ' lost' : '');
+    var g = el('g', {class:cls});
+    e._wire = el('line', {class:'wire', x1:e._sx, y1:e._sy, x2:e._sx, y2:e._sy});
+    e._head = el('polygon', {class:'head', points:'0,0 0,0 0,0', opacity:0});
+    e._dot  = el('circle', {class:'head', cx:e._sx, cy:e._sy, r:3.4, opacity:0});
+    e._lbl  = el('text', {class:'lbl', x:e._lx, y:e._ly, 'text-anchor':'middle'});
+    e._lbl.textContent = e.n;
+    g.appendChild(e._wire); g.appendChild(e._head); g.appendChild(e._dot); g.appendChild(e._lbl);
+    if(e.lost){
+      var mx = e._sx + (e._ex - e._sx)*0.55, my = e._sy + (e._ey - e._sy)*0.55;
+      g.appendChild(el('line', {class:'lad-x', x1:mx-6, y1:my-6, x2:mx+6, y2:my+6}));
+      g.appendChild(el('line', {class:'lad-x', x1:mx+6, y1:my-6, x2:mx-6, y2:my+6}));
+    }
+    svg.appendChild(g);
+    e._g = g;
+  });
+
+  // delivery markers, grouped by protocol + delivery time
+  var groups = {};
+  ['t','u'].forEach(function(p){
+    Object.keys(DELIV[p]).forEach(function(m){
+      var key = p + '@' + DELIV[p][m];
+      (groups[key] = groups[key] || []).push(+m);
+    });
+  });
+  window.__marks = [];
+  Object.keys(groups).forEach(function(key){
+    var p = key.split('@')[0], time = +key.split('@')[1], ms = groups[key].sort(function(a,b){return a-b;});
+    ms.forEach(function(m, i){
+      var x = LINES[p].mark + i*19, y = Y(time) - 7;
+      var g = el('g', {class:'deliv', opacity:0});
+      g.appendChild(el('rect', {x:x, y:y, width:17, height:14, rx:3}));
+      var tx = el('text', {x:x+8.5, y:y+10, 'text-anchor':'middle'});
+      tx.textContent = m;
+      g.appendChild(tx);
+      svg.appendChild(g);
+      window.__marks.push({g:g, at:time});
+    });
+  });
+}
+
+function paint(t){
+  EV.forEach(function(e){
+    var g = e._g;
+    if(t < e.t){ g.style.display = 'none'; return; }
+    g.style.display = '';
+    var p = clamp((t - e.t) / e._prop, 0, 1);
+    var f = e.lost ? Math.min(p, 0.55) : p;
+    var cx = e._sx + (e._ex - e._sx)*f, cy = e._sy + (e._ey - e._sy)*f;
+    e._wire.setAttribute('x2', cx); e._wire.setAttribute('y2', cy);
+    var done = f >= 1;
+    e._dot.setAttribute('opacity', (!done && !e.lost) ? 1 : 0);
+    e._dot.setAttribute('cx', cx); e._dot.setAttribute('cy', cy);
+    if(done && !e.lost){
+      var x = e._ex, y = e._ey, s = (e.d === 1 ? 1 : -1);
+      e._head.setAttribute('points', x+','+y+' '+(x-11*s)+','+(y-5)+' '+(x-9*s)+','+(y+5));
+      e._head.setAttribute('opacity', 1);
+    } else e._head.setAttribute('opacity', 0);
+    e._lbl.setAttribute('opacity', clamp(p*2.6, 0, 1));
+  });
+  window.__marks.forEach(function(mk){ mk.g.setAttribute('opacity', t >= mk.at ? 1 : 0); });
+  var showHold = (t >= 24 && t < 40) ? 1 : 0;
+  holdRect.setAttribute('opacity', showHold);
+  holdText.setAttribute('opacity', showHold);
+}
+
+/* scoreboard */
+function stateOf(p, m, t){
+  var arr = ARRIVE[p][m], del = DELIV[p][m];
+  if(arr === undefined){
+    var sent = null;
+    EV.forEach(function(e){ if(e.p === p && e.m === m && !e.retx) sent = e.t; });
+    return (sent !== null && t >= sent + 3.3) ? 'gone' : '';
+  }
+  if(t >= del) return 'done';
+  if(p === 't' && m === 3 && t >= LOSTAT.t) return 'gone';
+  if(t >= arr) return 'arrived';
+  return '';
+}
+var scoreT = document.getElementById('scoreT'), scoreU = document.getElementById('scoreU');
+function buildScore(box){
+  var h = '';
+  for(var m=1; m<=6; m++) h += '<div class="msg" data-m="' + m + '">' + m + '</div>';
+  box.innerHTML = h;
+}
+function paintScore(t){
+  [['t', scoreT, document.getElementById('sumT')],
+   ['u', scoreU, document.getElementById('sumU')]].forEach(function(row){
+    var p = row[0], box = row[1], sum = row[2];
+    var done = 0, held = 0, gone = 0, last = 0, order = [];
+    for(var m=1; m<=6; m++){
+      var st = stateOf(p, m, t);
+      var cell = box.querySelector('[data-m="' + m + '"]');
+      cell.className = 'msg' + (st ? ' ' + st : '');
+      if(st === 'done'){ done++; last = Math.max(last, DELIV[p][m]); order.push([DELIV[p][m], m]); }
+      if(st === 'arrived') held++;
+      if(st === 'gone') gone++;
+    }
+    var ooo = false, prev = 0;
+    order.sort(function(a,b){ return a[0]-b[0] || a[1]-b[1]; });
+    order.forEach(function(o){ if(o[1] < prev) ooo = true; prev = o[1]; });
+    var bits = ['<b>' + done + '/6</b> delivered'];
+    if(held) bits.push('<b>' + held + '</b> arrived but blocked');
+    if(gone) bits.push('<b>' + gone + '</b> lost');
+    if(done) bits.push('last at <b>t=' + last + '</b>');
+    if(ooo) bits.push('<b>out of order</b>');
+    else if(done > 1) bits.push('in order');
+    sum.innerHTML = bits.join(' · ');
+  });
+}
+
+var clockEl = document.getElementById('labClock');
+function setClock(t){ clockEl.textContent = 't = ' + Math.min(Math.round(t), 44); }
+function autoScroll(t){
+  if(!scroller) return;
+  scroller.scrollTop = clamp(Y(t) - scroller.clientHeight*0.55, 0, LH);
+}
+var playBtn = document.getElementById('labPlay');
+function setLabel(){ playBtn.innerHTML = playing ? '❚❚&nbsp; Pause' : '▶&nbsp; Play'; }
+function frame(ts){
+  if(!playing) return;
+  if(!lastTs) lastTs = ts;
+  var dt = Math.min((ts - lastTs)/1000, 0.1); lastTs = ts;
+  T += dt * (+document.getElementById('labSpeed').value) * 1.5;
+  if(T >= TEND){ T = TEND; playing = false; setLabel(); }
+  paint(T); paintScore(T); setClock(T); autoScroll(T);
+  if(playing) requestAnimationFrame(frame);
+}
+if(svg){
+  build(); buildScore(scoreT); buildScore(scoreU);
+  paint(TEND); paintScore(TEND); setClock(TEND);
+  playBtn.addEventListener('click', function(){
+    if(playing){ playing = false; setLabel(); return; }
+    if(T >= TEND) T = 0;
+    playing = true; lastTs = 0; setLabel(); requestAnimationFrame(frame);
+  });
+  document.getElementById('labStep').addEventListener('click', function(){
+    playing = false; setLabel();
+    var next = null;
+    EV.forEach(function(e){ var a = e.t + e._prop; if(a > T + 0.001 && (next === null || a < next)) next = a; });
+    T = (next === null) ? TEND : next;
+    paint(T); paintScore(T); setClock(T); autoScroll(T);
+  });
+  document.getElementById('labReset').addEventListener('click', function(){
+    playing = false; setLabel(); T = 0;
+    paint(T); paintScore(T); setClock(T); scroller.scrollTop = 0;
+  });
+}
+
+/* ══════════════════════════════════════════════════
+   2. HEX DUMP EXPLORER — a real DNS query
+   ══════════════════════════════════════════════════ */
+var SRC_IP = [192,0,2,10], DST_IP = [198,51,100,53];
+var BASE = [
+  0xD4,0x31, 0x00,0x35, 0x00,0x25, 0x00,0x00,
+  0xAB,0xCD, 0x01,0x00, 0x00,0x01, 0x00,0x00, 0x00,0x00, 0x00,0x00,
+  0x07,0x65,0x78,0x61,0x6D,0x70,0x6C,0x65, 0x03,0x63,0x6F,0x6D, 0x00,
+  0x00,0x01, 0x00,0x01
+];
+var BYTES = BASE.slice();
+
+function sum16(arr){
+  var s = 0;
+  for(var i=0; i<arr.length; i+=2){
+    var w = (arr[i] << 8) | (i+1 < arr.length ? arr[i+1] : 0);
+    s += w; s = (s & 0xffff) + (s >>> 16);
+  }
+  return s & 0xffff;
+}
+function pseudo(){
+  return SRC_IP.concat(DST_IP, [0, 17, (BYTES.length >> 8) & 0xff, BYTES.length & 0xff]);
+}
+function computeCk(){
+  var b = BYTES.slice(); b[6] = 0; b[7] = 0;
+  var c = (~sum16(pseudo().concat(b))) & 0xffff;
+  return c === 0 ? 0xffff : c;
+}
+function verifySum(){ return sum16(pseudo().concat(BYTES)); }
+function refreshCk(){ var c = computeCk(); BYTES[6] = (c >> 8) & 0xff; BYTES[7] = c & 0xff; }
+
+var FLD = [
+ {a:0,  b:1,  n:'Source Port', v:function(){ return d16(0) + '  — an ephemeral port the resolver picked'; },
+  d:'Where the reply must be sent. The DNS server copies this into its response’s destination port, which is how the resolver’s socket receives it. UDP explicitly allows this to be 0, meaning “expect no reply”.'},
+ {a:2,  b:3,  n:'Destination Port', v:function(){ return d16(2) + '  — the well-known DNS port'; },
+  d:'The only thing routing this datagram to a program rather than just to a machine. Nothing is listening on this port? The kernel replies with ICMP type 3 code 3, port unreachable — and your unconnected socket never hears about it.'},
+ {a:4,  b:5,  n:'Length', v:function(){ return d16(4) + ' bytes  =  8 header + 29 payload'; },
+  d:'Header plus payload, so the minimum legal value is 8 (an empty datagram). This field is entirely redundant with the IP total length field — a 1980 design decision kept for compatibility, and one of the few places in the stack where the same number is transmitted twice.'},
+ {a:6,  b:7,  n:'Checksum', v:function(){ return d16(6) + '  — computed live from these bytes'; },
+  d:'Ones’-complement sum over a 12-byte pseudo-header, this header with the field zeroed, and the payload. Optional over IPv4 (send 0x0000 to skip), mandatory over IPv6. If the real result is 0x0000 it is transmitted as 0xFFFF instead, so it can never be mistaken for “not computed”.'},
+ {a:8,  b:9,  n:'DNS · Transaction ID', v:function(){ return d16(8) + '  — random, matched against the reply'; },
+  d:'The payload begins here — UDP neither knows nor cares what it contains. This 16-bit ID is DNS reimplementing part of what TCP would have given it: a way to match a response to its request, since datagrams carry no connection identity. Guess it and you can forge a reply, which is precisely the Kaminsky attack.'},
+ {a:10, b:11, n:'DNS · Flags', v:function(){ return d16(10) + '  — standard query, recursion desired'; },
+  d:'Bit 8 set is RD, “recursion desired”. The TC bit lives in this field too: a server sets it when its answer exceeded the client’s advertised UDP buffer, telling the resolver to retry the whole query over TCP.'},
+ {a:12, b:13, n:'DNS · Question count', v:function(){ return d16(12) + ' question'; },
+  d:'One question follows. The next three counts are all zero because a query carries no answer, authority or additional records.'},
+ {a:14, b:15, n:'DNS · Answer count', v:function(){ return d16(14); },
+  d:'Zero in a query. The response will set this to the number of resource records it returns — and a large value here is what makes DNS an amplifier.'},
+ {a:16, b:17, n:'DNS · Authority count', v:function(){ return d16(16); }, d:'Zero in a query.'},
+ {a:18, b:19, n:'DNS · Additional count', v:function(){ return d16(18); },
+  d:'Zero here. In modern DNS this is usually 1, holding the EDNS0 OPT pseudo-record that advertises how large a UDP response the resolver can accept — the mechanism that lifted the old 512-byte ceiling, and that current practice sets back down to about 1232 to avoid fragmentation.'},
+ {a:20, b:32, n:'DNS · QNAME', v:function(){ return '07 "example" 03 "com" 00  →  example.com'; },
+  d:'A domain name in DNS wire format: each label prefixed by its length, terminated by a zero byte. There are no dots on the wire — the dots in “example.com” are the length prefixes 07 and 03. Note that the length byte is why a label cannot exceed 63 characters.'},
+ {a:33, b:34, n:'DNS · QTYPE', v:function(){ return d16(33) + '  =  A (IPv4 address)'; },
+  d:'What kind of record is being asked for. 1 = A, 28 = AAAA, 15 = MX, 16 = TXT. Type 255 (ANY) used to return everything a server knew — an enormous response to a tiny query, which is why most operators now refuse it outright.'},
+ {a:35, b:36, n:'DNS · QCLASS', v:function(){ return d16(35) + '  =  IN (Internet)'; },
+  d:'Effectively always 1. The class field is a relic of an era when DNS was expected to serve non-internet networks such as CHAOSnet.'}
+];
+function d16(i){ var v = (BYTES[i] << 8) | BYTES[i+1]; return v + '  (' + hex(v) + ')'; }
+
+var dumpEl = document.getElementById('hexDump');
+var legEl = document.getElementById('hexLegend');
+var detEl = document.getElementById('hexDetail');
+var curF = 3;
+
+function fieldOf(i){ for(var k=0; k<FLD.length; k++) if(i >= FLD[k].a && i <= FLD[k].b) return k; return -1; }
+function asc(v){ return (v >= 32 && v < 127) ? String.fromCharCode(v) : '.'; }
+
+function drawDump(){
+  var h = '';
+  for(var r=0; r<BYTES.length; r+=8){
+    h += '<div class="hexrow"><span class="hexoff">' + r.toString(16).padStart(4,'0') + '</span>';
+    var a = '';
+    for(var i=r; i<r+8; i++){
+      if(i >= BYTES.length){ h += '<span class="hexb" style="visibility:hidden">00</span>'; continue; }
+      var fi = fieldOf(i);
+      h += '<span class="hexb' + (fi < 4 ? ' hdr' : '') + (fi === curF ? ' on' : '') +
+           '" data-i="' + i + '">' + BYTES[i].toString(16).toUpperCase().padStart(2,'0') + '</span>';
+      a += asc(BYTES[i]);
+    }
+    h += '<span class="hexasc">' + a.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span></div>';
+  }
+  dumpEl.innerHTML = h;
+  legEl.innerHTML = FLD.map(function(f, i){
+    return '<button data-f="' + i + '" class="' + (i === curF ? 'on' : '') + '">' + f.n.replace('DNS · ','') + '</button>';
+  }).join('');
+}
+function showF(i){
+  curF = i; drawDump();
+  var f = FLD[i];
+  detEl.innerHTML = '<h4>' + f.n + ' <span class="off">byte ' + f.a + (f.b > f.a ? '–' + f.b : '') +
+                    ' · ' + ((f.b - f.a + 1) * 8) + ' bits</span></h4>' +
+                    '<div class="val">' + f.v() + '</div>' +
+                    '<p>' + f.d + '</p>';
+}
+if(dumpEl){
+  refreshCk();
+  showF(3);
+  dumpEl.addEventListener('click', function(ev){
+    var b = ev.target.closest('.hexb');
+    if(b && b.getAttribute('data-i') !== null) showF(fieldOf(+b.getAttribute('data-i')));
+  });
+  legEl.addEventListener('click', function(ev){
+    var b = ev.target.closest('button');
+    if(b) showF(+b.getAttribute('data-f'));
+  });
+}
+
+/* ══════════════════════════════════════════════════
+   3. CHECKSUM LAB
+   ══════════════════════════════════════════════════ */
+var ckOut = document.getElementById('ckOut');
+var corrupted = false;
+function ipStr(a){ return a.join('.'); }
+function drawCk(){
+  var vs = verifySum();
+  var ok = vs === 0xffff;
+  var rows = [
+    ['pseudo-header src', ipStr(SRC_IP)],
+    ['pseudo-header dst', ipStr(DST_IP)],
+    ['protocol', '17  (UDP)'],
+    ['UDP length', BYTES.length + ' bytes'],
+    ['bytes covered', (12 + BYTES.length) + '  (12 pseudo + 8 header + ' + (BYTES.length - 8) + ' payload)'],
+    ['checksum in header', hex((BYTES[6] << 8) | BYTES[7])],
+    ['receiver verification sum', hex(vs)]
+  ];
+  var h = rows.map(function(r){
+    return '<div class="line"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+  }).join('');
+  h += '<div class="line" style="margin-top:6px"><span class="k">verdict</span><span class="' +
+       (ok ? 'verdict-ok' : 'verdict-bad') + '">' +
+       (ok ? '0xFFFF → complement is 0x0000 → datagram accepted'
+           : hex(vs) + ' ≠ 0xFFFF → checksum failed → datagram silently discarded') + '</span></div>';
+  ckOut.innerHTML = h;
+  document.getElementById('ckState').textContent = corrupted ? 'corrupted' : 'intact';
+  document.getElementById('ckState').className = 'chip ' + (corrupted ? 'd' : 'ok');
+}
+if(ckOut){
+  drawCk();
+  document.getElementById('ckFlip').addEventListener('click', function(){
+    BYTES[23] = 0x71;              // 'a' → 'q' inside "example"
+    corrupted = true; drawCk(); drawDump(); showF(10);
+    document.getElementById('ckFoot').innerHTML =
+      'One byte changed — <span class="m">0x61 “a”</span> became <span class="m">0x71 “q”</span>, so the query now reads <b>exqmple.com</b>. ' +
+      'The checksum in the header still describes the original bytes, so the receiver’s sum no longer lands on 0xFFFF and the datagram is thrown away without a word to anyone.';
+  });
+  document.getElementById('ckFix').addEventListener('click', function(){
+    BYTES = BASE.slice(); refreshCk();
+    corrupted = false; drawCk(); drawDump(); showF(3);
+    document.getElementById('ckFoot').innerHTML =
+      'Computed in your browser from the actual bytes, with the real pseudo-header. Corrupt a byte and the receiver’s verification sum stops landing on <span class="m">0xFFFF</span>.';
+  });
+}
+
+/* ══════════════════════════════════════════════════
+   4. SECTION NAV
+   ══════════════════════════════════════════════════ */
+var links = Array.prototype.slice.call(document.querySelectorAll('.nav-list a'));
+var secs = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); });
+if('IntersectionObserver' in window){
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(!en.isIntersecting) return;
+      var i = secs.indexOf(en.target);
+      if(i < 0) return;
+      links.forEach(function(a, j){ a.classList.toggle('on', i === j); });
+      var a = links[i], sc = a.parentNode.parentNode;
+      if(sc && sc.scrollWidth > sc.clientWidth){
+        sc.scrollTo({left: Math.max(0, a.offsetLeft - sc.clientWidth/2 + a.offsetWidth/2),
+                     behavior: RM ? 'auto' : 'smooth'});
+      }
+    });
+  }, {rootMargin:'-14% 0px -74% 0px', threshold:0});
+  secs.forEach(function(s){ if(s) io.observe(s); });
+}
+})();
+</script>
